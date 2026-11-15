@@ -67,6 +67,16 @@ function create(x, y) {
   }
 }
 
+// How often Service.qml should tick, in ms. Full rate only while something moves;
+// the sprite animates on its own, so a still pet only needs to notice things.
+var STILL = { idle: true, sit: true, groom: true, yawn: true, stretch: true, petted: true, peek: true, held: true }
+function tickInterval(mode, hasBall) {
+  if (hasBall) return 33
+  if (mode === "sleep") return 1000
+  if (mode === "walk") return 50   // 3px a step: one sprite pixel at medium size
+  return STILL[mode] ? 250 : 33
+}
+
 // Whether Service.qml needs to keep the mouse position fresh.
 function watchesCursor(mode) {
   return !!REACTIVE[mode] || mode === "crouch" || mode === "pounce"

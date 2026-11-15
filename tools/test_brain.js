@@ -116,6 +116,26 @@ assert(bats >= 3, "batted the ball only " + bats + " times")
 assert.strictEqual(k.ball, null, "ball should go away after a while")
 assert.notStrictEqual(k.mode, "run", "stops chasing once the ball is gone")
 
+// Adaptive tick rate: slow while still, full rate while moving, and the pet still lives a normal life
+assert.strictEqual(B.tickInterval("run", false), 33)
+assert.strictEqual(B.tickInterval("climb", false), 33)
+assert.strictEqual(B.tickInterval("sleep", true), 33, "a ball in play always gets the full rate")
+assert(B.tickInterval("sleep", false) > B.tickInterval("sit", false) && B.tickInterval("sit", false) > 33)
+const ab = { ...cb, ledges: [win], ballSize: 36 }
+const a = B.create(500, ab.floor)
+const seenA = new Set()
+let simulated = 0, ticks = 0
+while (simulated < 30 * 60) {
+  const dt = B.tickInterval(a.mode, !!a.ball) / 1000
+  B.tick(a, dt, ab, rand)
+  simulated += dt; ticks++
+  seenA.add(a.mode)
+  assert(a.x >= 0 && a.x <= ab.w)
+  if (!B.ON_LEDGE[a.mode] && a.mode !== "fall") assert.strictEqual(a.y, ab.floor)
+}
+for (const m of ["idle", "walk", "sit", "sleep", "climb", "peek", "descend"]) assert(seenA.has(m), "adaptive: never entered " + m)
+assert(ticks / simulated < 18, "should tick well under 30/s on average, did " + (ticks / simulated).toFixed(1) + "/s")
+
 // Energy: a lazy cat sleeps more than a playful one
 function sleepShare(energy) {
   const eb = { w: 1824, floor: 984, size: 96, peek: 30, ledges: [], ballSize: 36, cursor: null, energy }

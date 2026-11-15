@@ -119,13 +119,17 @@ Item {
     }
 
     // Hyprland sends no event when a tile is resized, so poll as well as listen.
+    // Only while windows matter: a shown cat that may climb.
+    readonly property bool climbing: store.shown && store.hangOnWindows
+    onClimbingChanged: if (!climbing) ledges = []
     Connections {
       target: Hyprland
+      enabled: win.climbing
       function onRawEvent(event) { Hyprland.refreshToplevels() }
     }
     Timer {
       interval: 1000
-      running: true
+      running: win.climbing
       repeat: true
       triggeredOnStart: true
       onTriggered: { Hyprland.refreshToplevels(); win.refreshLedges() }
@@ -168,7 +172,7 @@ Item {
     }
 
     Timer {
-      interval: 33
+      interval: Brain.tickInterval(pet.mode, ball.shown)
       running: store.shown && win.width > 0 && win.height > 0
       repeat: true
       onTriggered: {
@@ -206,21 +210,33 @@ Item {
           NumberAnimation { duration: 600; easing.type: Easing.InOutQuad }
         }
 
-        AnimatedSprite {
+        // The whole sheet, slid behind a one-frame window. Not AnimatedSprite: that one makes
+        // Qt redraw this full-screen layer every vsync; this only repaints when the frame changes.
+        Item {
           y: -pet.shownTop
           width: root.size
           height: root.size
-          source: root.spriteUrl
-          frameWidth: 32
-          frameHeight: 32
-          frameX: 0
-          frameY: pet.anim.row * 32
-          frameCount: pet.anim.frames
-          frameRate: pet.anim.fps
-          interpolate: false
-          smooth: false
+          clip: true
           transform: Scale { origin.x: root.size / 2; xScale: pet.dir }
+
+          Image {
+            x: -pet.frame * root.size
+            y: -pet.anim.row * root.size
+            width: implicitWidth * root.pixelScale
+            height: implicitHeight * root.pixelScale
+            source: root.spriteUrl
+            smooth: false
+          }
         }
+      }
+
+      property int frame: 0
+      onModeChanged: frame = 0
+      Timer {
+        interval: 1000 / pet.anim.fps
+        running: store.shown
+        repeat: true
+        onTriggered: pet.frame = (pet.frame + 1) % pet.anim.frames
       }
 
       MouseArea {
