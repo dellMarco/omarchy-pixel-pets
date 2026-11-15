@@ -168,6 +168,20 @@ def dangle(f, eye="open"):
     return over(outline(g), head(16, 11, eye))
 
 
+def hang(swing=0, eye="open"):
+    """Hanging by the front paws: paws at the very top of the frame, body dangling."""
+    g = grid()
+    for x in (7, 24):                       # arms come up from behind the head
+        rect(g, x, 3, x + 1, 12, "F")
+        rect(g, x - 1 + (x > 16), 1, x + 1 + (x > 16), 2, "B")   # paws on the edge
+    tail(g, [(10, 26), (9, 27), (8 + swing, 28), (8 + swing, 29)])
+    ellipse(g, 16, 21, 5, 7, "F")
+    ellipse(g, 16, 22, 2.5, 4.5, "B")
+    rect(g, 12 + swing, 26, 13 + swing, 30, "F")
+    rect(g, 19 + swing, 26, 20 + swing, 30, "F")
+    return over(outline(g), head(16, 11, eye))
+
+
 ROWS = [
     ("idle",   [stand(), stand(sway=1), stand(), stand(sway=1, eye="closed")]),
     ("walk",   [stand((0, 2, 2, 0)), stand((0, 1, 1, 0), sway=1), stand(bob=1),
@@ -177,6 +191,8 @@ ROWS = [
     ("petted", [petted(f) for f in range(4)]),
     ("held",   [dangle(0), dangle(1)]),
     ("fall",   [dangle(0, "wide"), dangle(1, "wide")]),
+    ("jump",   [hang(1, "wide"), hang(-1, "wide")]),
+    ("hang",   [hang(s) for s in (0, 1, 0, -1)]),
 ]
 
 

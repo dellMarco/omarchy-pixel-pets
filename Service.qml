@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import "Brain.js" as Brain
 
 Item {
@@ -14,7 +15,44 @@ Item {
 
     // Brain state; created once the window has a size.
     property var cat: null
-    readonly property var bounds: ({ w: width - root.size, floor: height - root.size })
+    readonly property var bounds: ({
+      w: width - root.size,
+      floor: height - root.size,
+      size: root.size,
+      grip: 2 * root.pixelScale,
+      ledges: ledges
+    })
+
+    // Top edges of the windows visible on this monitor, in this window's coordinates.
+    property var ledges: []
+    function refreshLedges() {
+      var out = []
+      var mon = Hyprland.monitorFor(win.screen)
+      var ws = mon ? mon.activeWorkspace : null
+      if (ws && !ws.hasFullscreen) {
+        var tops = Hyprland.toplevels.values
+        for (var i = 0; i < tops.length; i++) {
+          var o = tops[i].lastIpcObject
+          if (!o || !o.at || !o.size || o.hidden || !o.workspace || o.workspace.id !== ws.id) continue
+          if (o.size[0] < root.size || o.size[1] < root.size * 1.5) continue
+          out.push({ id: o.address, x: o.at[0] - mon.x, y: o.at[1] - mon.y, w: o.size[0] })
+        }
+      }
+      ledges = out
+    }
+
+    // Hyprland sends no event when a tile is resized, so poll as well as listen.
+    Connections {
+      target: Hyprland
+      function onRawEvent(event) { Hyprland.refreshToplevels() }
+    }
+    Timer {
+      interval: 1000
+      running: true
+      repeat: true
+      triggeredOnStart: true
+      onTriggered: { Hyprland.refreshToplevels(); win.refreshLedges() }
+    }
 
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
@@ -38,6 +76,8 @@ Item {
       repeat: true
       onTriggered: {
         if (!win.cat) win.cat = Brain.create(win.bounds.w / 2, win.bounds.floor)
+        // Windows can vanish under her at any moment, so recheck every tick while she is on one.
+        if (win.cat.goal !== null) win.refreshLedges()
         Brain.tick(win.cat, interval / 1000, win.bounds, Math.random)
         win.sync()
       }

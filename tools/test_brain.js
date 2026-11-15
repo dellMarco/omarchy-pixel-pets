@@ -33,4 +33,32 @@ assert.strictEqual(s.mode, "idle")
 assert.strictEqual(s.y, bounds.floor)
 assert.strictEqual(s.x, 0, "dropped off-screen pet is clamped back")
 
+// Hanging from a window edge
+const win = { id: "0xabc", x: 200, y: 38, w: 900 }
+const wb = { w: 1824, floor: 984, size: 96, grip: 6, ledges: [win] }
+let hung = false
+for (let i = 0; i < 30 * 60 * 30 && !hung; i++) {
+  const was = s.mode
+  B.tick(s, 1 / 30, wb, rand)
+  assert(!(was === "jump" && s.mode === "fall"), "jumped at a spot outside the window")
+  assert(B.ANIMS[s.mode], "no animation for mode " + s.mode)
+  hung = s.mode === "hang"
+}
+assert(hung, "never hung from the window")
+assert.strictEqual(s.y, win.y - wb.grip, "hangs with her paws on the edge")
+assert(s.x >= win.x && s.x + wb.size <= win.x + win.w, "hangs within the window")
+
+wb.ledges = [] // window closes
+for (let i = 0; i < 90 && s.mode !== "idle"; i++) B.tick(s, 1 / 30, wb, rand)
+assert.strictEqual(s.mode, "idle", "falls when the window goes away")
+assert.strictEqual(s.y, wb.floor)
+
+wb.ledges = [win] // lets go by herself after a while
+while (s.mode !== "hang") B.tick(s, 1 / 30, wb, rand)
+for (let i = 0; i < 30 * 20 && s.mode === "hang"; i++) B.tick(s, 1 / 30, wb, rand)
+assert.strictEqual(s.mode, "fall", "lets go after hanging")
+while (s.mode !== "hang") B.tick(s, 1 / 30, wb, rand)
+B.pet(s)
+assert.strictEqual(s.mode, "fall", "petting a hanging cat makes her let go")
+
 console.log("brain ok")
