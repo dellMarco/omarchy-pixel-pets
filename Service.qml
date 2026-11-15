@@ -124,8 +124,13 @@ Item {
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     // Only the pet takes input; everything else clicks through to the apps below.
+    // Only her visible part takes clicks. Explicit geometry rather than `item:` a child of pet:
+    // a Region only follows its own item's x/y, so a nested item leaves the region behind when she walks.
     mask: Region {
-      item: shownPart
+      x: pet.x
+      y: pet.y + pet.shownTop
+      width: pet.shownHeight > 0 ? pet.width : 0
+      height: pet.shownHeight
       Region { item: ball }
     }
 
