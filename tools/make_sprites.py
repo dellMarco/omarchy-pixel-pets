@@ -130,11 +130,18 @@ def sit(flick=0, eye="open"):
 
 
 def sleep(f):
+    """Lying loaf: long rounded back, head resting at the front, tail up at the back."""
     g = grid()
-    ry = 4.5 + 0.5 * (f in (1, 2))    # breathing
-    tail(g, [(3, 23), (2, 22), (1, 21), (1, 20), (2, 19)])
-    ellipse(g, 13, 28.5 - ry, 10.5, ry, "F")
-    g = over(outline(g), head(21, 21, "closed"))
+    top = 17 - (f in (1, 2))          # breathing
+    tail(g, [(3, top + 2), (2, top + 1), (2, top), (1, top - 1), (1, top - 2), (1, top - 3)])
+    ellipse(g, 12, 24, 9.5, 24 - top, "F")
+    rect(g, 3, 24, 21, 28, "F")
+    for y in range(29, S):            # flat on the floor
+        rect(g, 0, y, S - 1, y, None)
+    rect(g, 5, 27, 19, 28, "B")
+    g = over(outline(g), head(22, 21, "closed"))
+    rect(g, 14, 26, 18, 28, "O")      # tucked front paw
+    rect(g, 15, 27, 17, 28, "B")
     stamp(g, 25 + f, 7 - 2 * f, ("xxxx", "..x.", ".x..", "xxxx"), "Z")
     return g
 
