@@ -184,6 +184,12 @@ Item {
         width: root.size
         height: pet.shownHeight
         clip: true
+        // See-through while climbing over a window, so she doesn't distract from what's on it.
+        opacity: pet.mode === "climb" || pet.mode === "descend" ? 0.4 : 1
+
+        Behavior on opacity {
+          NumberAnimation { duration: 600; easing.type: Easing.InOutQuad }
+        }
 
         AnimatedSprite {
           y: -pet.shownTop
