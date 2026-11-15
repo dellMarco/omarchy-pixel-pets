@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import Quickshell.Io
 import "Brain.js" as Brain
 
 Item {
@@ -9,6 +10,7 @@ Item {
 
   property int pixelScale: 3
   readonly property int size: 32 * pixelScale
+  readonly property int ballSize: 12 * pixelScale
 
   PanelWindow {
     id: win
@@ -20,8 +22,37 @@ Item {
       floor: height - root.size,
       size: root.size,
       grip: 2 * root.pixelScale,
-      ledges: ledges
+      ledges: ledges,
+      ballSize: root.ballSize,
+      cursor: cursor
     })
+
+    // Mouse position in this window's coordinates, or null when it is on another screen.
+    // Read straight from Hyprland's request socket: no process per poll.
+    property var cursor: null
+    Socket {
+      id: cursorSocket
+      path: Hyprland.requestSocketPath
+      parser: SplitParser {
+        splitMarker: ""
+        onRead: data => {
+          var m = /(-?\d+),\s*(-?\d+)/.exec(data)
+          var mon = Hyprland.monitorFor(win.screen)
+          if (!m || !mon) return
+          var x = Number(m[1]) - mon.x, y = Number(m[2]) - mon.y
+          win.cursor = x >= 0 && y >= 0 && x < win.width && y < win.height ? { x: x, y: y } : null
+        }
+      }
+      onConnectedChanged: if (connected) { write("cursorpos"); flush() }
+    }
+    Timer {
+      interval: 100
+      repeat: true
+      // Only while she could react to it.
+      running: win.cat !== null && Brain.watchesCursor(pet.mode)
+      onRunningChanged: if (!running) win.cursor = null
+      onTriggered: if (!cursorSocket.connected) cursorSocket.connected = true
+    }
 
     // Top edges of the windows visible on this monitor, in this window's coordinates.
     property var ledges: []
@@ -61,13 +92,22 @@ Item {
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     // Only the pet takes input; everything else clicks through to the apps below.
-    mask: Region { item: pet }
+    mask: Region {
+      item: pet
+      Region { item: ball }
+    }
 
     function sync() {
       pet.x = Math.round(cat.x)
       pet.y = Math.round(cat.y)
       pet.dir = cat.dir
       pet.mode = cat.mode
+      if (cat.ball) {
+        ball.x = Math.round(cat.ball.x)
+        ball.y = Math.round(cat.ball.y)
+        ball.frame = Brain.yarnFrame(cat.ball, root.ballSize)
+      }
+      ball.shown = cat.ball !== null
     }
 
     Timer {
@@ -129,6 +169,68 @@ Item {
           if (win.cat.mode === "held") Brain.drop(win.cat)
           else Brain.pet(win.cat)
           win.sync()
+        }
+        onDoubleClicked: {
+          if (!win.cat) return
+          Brain.spawnBall(win.cat, win.bounds)
+          win.sync()
+        }
+      }
+    }
+
+    Item {
+      id: ball
+
+      property bool shown: false
+      property int frame: 0
+
+      visible: shown
+      // Zero size when hidden so it drops out of the input mask.
+      width: shown ? root.ballSize : 0
+      height: width
+
+      Image {
+        anchors.fill: parent
+        source: Qt.resolvedUrl("sprites/cat.png")
+        sourceClipRect: Qt.rect(ball.frame * 32, Brain.YARN_ROW * 32, 12, 12)
+        smooth: false
+      }
+
+      // Pick the ball up and throw it.
+      MouseArea {
+        property real grabX: 0
+        property real grabY: 0
+        property real vx: 0
+        property real vy: 0
+        property real lastT: 0
+
+        anchors.fill: parent
+        cursorShape: Qt.OpenHandCursor
+        onPressed: mouse => {
+          if (!win.cat || !win.cat.ball) return
+          grabX = mouse.x; grabY = mouse.y
+          vx = vy = 0
+          lastT = Date.now()
+          win.cat.ball.held = true
+        }
+        onPositionChanged: mouse => {
+          var o = win.cat ? win.cat.ball : null
+          if (!o || !o.held) return
+          var now = Date.now(), dt = Math.max(1, now - lastT) / 1000
+          var nx = ball.x + mouse.x - grabX, ny = ball.y + mouse.y - grabY
+          vx = (nx - o.x) / dt; vy = (ny - o.y) / dt
+          lastT = now
+          o.x = nx; o.y = ny
+          win.sync()
+        }
+        onReleased: {
+          var o = win.cat ? win.cat.ball : null
+          if (!o) return
+          var fresh = Date.now() - lastT < 100   // a throw, not a let-go after holding still
+          o.vx = fresh ? Math.max(-1500, Math.min(1500, vx)) : 0
+          o.vy = fresh ? Math.max(-1500, Math.min(1500, vy)) : 0
+          o.life = Brain.BALL_LIFE
+          o.held = false
         }
       }
     }

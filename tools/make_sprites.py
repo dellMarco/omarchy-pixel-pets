@@ -17,6 +17,8 @@ PALETTE = {
     "N": (245, 150, 160),  # nose, blush, inner ear
     "H": (229, 72, 77),    # heart
     "Z": (120, 150, 220),  # zzz
+    "Y": (125, 175, 235),  # yarn
+    "y": (80, 120, 200),   # yarn strands
 }
 
 
@@ -182,6 +184,97 @@ def hang(swing=0, eye="open"):
     return over(outline(g), head(16, 11, eye))
 
 
+def crouch(wiggle=0):
+    """Low hunting crouch, rear and tail wiggling, eyes locked on."""
+    g = grid()
+    tail(g, [(4, 22), (3, 21), (2, 20), (2 + wiggle, 19), (2 + wiggle, 18), (3 + wiggle, 17)])
+    rect(g, 7 + wiggle, 26, 9 + wiggle, 28, "F")      # bent back leg
+    rect(g, 11, 26, 12, 28, "S")
+    rect(g, 20, 27, 21, 28, "S")
+    ellipse(g, 13 + wiggle * 0.5, 24, 8, 3.5, "F")
+    for y in range(26, S):
+        for x in range(S):
+            if g[y][x] == "F":
+                g[y][x] = "B"
+    rect(g, 17, 27, 19, 28, "B")                      # front paws flat
+    return over(outline(g), head(22, 20, "wide"))
+
+
+def pounce(f):
+    """Airborne leap: stretched out, front paws reaching forward."""
+    g = grid()
+    tail(g, [(4, 17), (3, 16 + f), (2, 15 + f), (1, 15 + f), (0, 14 + f)])
+    rect(g, 4, 22, 6, 23, "F")                        # back legs kicked back
+    rect(g, 2, 23, 4, 24, "B")
+    ellipse(g, 13, 19, 9, 4, "F")
+    ellipse(g, 13, 21, 5, 1.5, "B")
+    rect(g, 19, 22, 23, 23, "F")                      # front legs reaching
+    rect(g, 23, 23 - f, 25, 24 - f, "B")
+    return over(outline(g), head(22, 14, "wide"))
+
+
+def paw(g, x0, y0, x1, y1):
+    """A raised front leg on its own outlined layer, white toes at (x1, y1)."""
+    p = grid()
+    rect(p, x0, y0, x1, y1, "F")
+    rect(p, x1 - 1, y1 - 1, x1, y1, "B")
+    return over(g, outline(p))
+
+
+def bat(f):
+    """Standing, swatting forward with one front paw."""
+    g = stand((0, 0, 4, 0), eye="wide")
+    return paw(g, 24, 21, 28, 22) if f == 0 else paw(g, 24, 23, 28, 25)
+
+
+def groom(f):
+    """Sitting, licking a raised paw."""
+    g = sit(eye="closed")
+    g = paw(g, 18, 15 + f % 2, 20, 19)
+    if f % 2:
+        px(g, 17, 16, "N")                            # tongue
+    return g
+
+
+def stretch(f):
+    """Play-bow stretch after a nap: front down, rear up."""
+    g = grid()
+    up = f == 1
+    tail(g, [(5, 16 - up), (4, 15 - up), (4, 14 - up), (4, 13 - up), (5, 12 - up)])
+    rect(g, 7, 20, 8, 28, "F")                        # back legs straight
+    rect(g, 11, 20, 12, 28, "S")
+    rect(g, 7, 28, 8, 28, "B")
+    ellipse(g, 10, 19 - up, 5, 4, "F")
+    ellipse(g, 17, 24, 7, 3, "F")
+    rect(g, 17, 27, 28, 28, "F")                      # front legs stretched flat
+    rect(g, 27, 27, 28, 28, "B")
+    return over(outline(g), head(22, 22, "closed"))
+
+
+def yawn(f):
+    """Sitting with a big yawn."""
+    g = sit(eye="closed")
+    if f == 1:
+        rect(g, 15, 14, 17, 16, "E")
+        px(g, 16, 16, "N")
+    else:
+        rect(g, 15, 15, 17, 15, "E")
+    return g
+
+
+def yarn(f):
+    """Ball of yarn in the top-left 12x12 of the frame; f rotates the strands."""
+    g = grid()
+    ellipse(g, 5.5, 5.5, 5, 5, "Y")
+    cos, sin = [(1, 0), (0.7, 0.7), (0, 1), (-0.7, 0.7)][f]
+    for k in (-2, 0, 2):                              # three parallel strands
+        for t in range(-5, 6):
+            x, y = round(5.5 + t * cos - k * sin), round(5.5 + t * sin + k * cos)
+            if g[y][x] == "Y":
+                g[y][x] = "y"
+    return outline(g)
+
+
 ROWS = [
     ("idle",   [stand(), stand(sway=1), stand(), stand(sway=1, eye="closed")]),
     ("walk",   [stand((0, 2, 2, 0)), stand((0, 1, 1, 0), sway=1), stand(bob=1),
@@ -193,6 +286,13 @@ ROWS = [
     ("fall",   [dangle(0, "wide"), dangle(1, "wide")]),
     ("jump",   [hang(1, "wide"), hang(-1, "wide")]),
     ("hang",   [hang(s) for s in (0, 1, 0, -1)]),
+    ("crouch", [crouch(0), crouch(1)]),
+    ("pounce", [pounce(0), pounce(1)]),
+    ("bat",    [bat(0), bat(1)]),
+    ("groom",  [groom(f) for f in range(4)]),
+    ("stretch", [stretch(f) for f in range(3)]),
+    ("yawn",   [yawn(f) for f in range(3)]),
+    ("yarn",   [yarn(f) for f in range(4)]),
 ]
 
 

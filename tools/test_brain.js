@@ -18,7 +18,7 @@ for (let i = 0; i < 30 * 60 * 30; i++) { // 30 simulated minutes
   assert.strictEqual(s.y, bounds.floor)
   assert(B.ANIMS[s.mode], "no animation for mode " + s.mode)
 }
-for (const m of ["idle", "walk", "sit", "sleep"]) assert(seen.has(m), "never entered " + m)
+for (const m of ["idle", "walk", "sit", "sleep", "groom", "yawn", "stretch"]) assert(seen.has(m), "never entered " + m)
 
 B.pet(s)
 assert.strictEqual(s.mode, "petted")
@@ -60,5 +60,49 @@ assert.strictEqual(s.mode, "fall", "lets go after hanging")
 while (s.mode !== "hang") B.tick(s, 1 / 30, wb, rand)
 B.pet(s)
 assert.strictEqual(s.mode, "fall", "petting a hanging cat makes her let go")
+
+// Chasing the mouse
+const cb = { w: 1824, floor: 984, size: 96, grip: 6, ledges: [], ballSize: 36, cursor: null }
+const c = B.create(500, cb.floor)
+let crouched = false, pounced = false, bored = false
+for (let i = 0; i < 30 * 60; i++) {
+  cb.cursor = { x: 800 + 30 * Math.sin(i / 3), y: cb.floor + 60 }   // wiggling near the floor
+  B.tick(c, 1 / 30, cb, rand)
+  crouched = crouched || c.mode === "crouch"
+  if (c.mode === "pounce") {
+    pounced = true
+    assert(c.y <= cb.floor && c.y >= cb.floor - 60, "pounce arc out of range: " + c.y)
+  }
+  bored = bored || c.bored > 0
+  assert(c.x >= 0 && c.x <= cb.w)
+}
+assert(crouched && pounced, "never stalked and pounced the mouse")
+assert(bored, "never got bored of the mouse")
+
+const far = B.create(500, cb.floor)
+for (let i = 0; i < 30 * 60 * 5; i++) {
+  cb.cursor = { x: 800 + 30 * Math.sin(i / 3), y: 100 }   // moving, but high up the screen
+  B.tick(far, 1 / 30, cb, rand)
+  assert(far.mode !== "crouch" && far.mode !== "pounce", "chased a mouse that was nowhere near the floor")
+}
+
+// Yarn ball
+cb.cursor = null
+const k = B.create(300, cb.floor)
+B.spawnBall(k, cb)
+let bats = 0
+for (let i = 0; i < 30 * 45; i++) {
+  const was = k.mode
+  B.tick(k, 1 / 30, cb, rand)
+  if (k.mode === "bat" && was !== "bat") bats++
+  if (k.ball) {
+    assert(k.ball.x >= 0 && k.ball.x <= cb.w + cb.size - cb.ballSize, "ball left the screen")
+    assert(k.ball.y >= 0 && k.ball.y <= cb.floor + cb.size - cb.ballSize, "ball fell through the floor")
+    assert(B.yarnFrame(k.ball, cb.ballSize) >= 0 && B.yarnFrame(k.ball, cb.ballSize) < B.YARN_FRAMES)
+  }
+}
+assert(bats >= 3, "batted the ball only " + bats + " times")
+assert.strictEqual(k.ball, null, "ball should go away after a while")
+assert.notStrictEqual(k.mode, "run", "stops chasing once the ball is gone")
 
 console.log("brain ok")
