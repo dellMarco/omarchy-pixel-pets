@@ -74,23 +74,23 @@ def tail(g, points):
 
 
 def head(cx, cy, eye="open"):
-    """Big front-facing head, as its own outlined layer."""
+    """Small front-facing head, as its own outlined layer."""
     g = grid()
-    ellipse(g, cx, cy, 8, 6.5, "F")
+    ellipse(g, cx, cy, 7, 5.5, "F")
     for s in (-1, 1):                       # ears: sharp triangles, tip at the outer edge
-        ox = cx + s * 7
+        ox = cx + s * 6
         for i in range(4):
-            rect(g, min(ox, ox - s * i), cy - 9 + i, max(ox, ox - s * i), cy - 9 + i, "F")
-        px(g, ox - s, cy - 7, "N")
-        rect(g, min(ox - s, ox - 2 * s), cy - 6, max(ox - s, ox - 2 * s), cy - 6, "N")
+            rect(g, min(ox, ox - s * i), cy - 8 + i, max(ox, ox - s * i), cy - 8 + i, "F")
+        px(g, ox - s, cy - 6, "N")
+        rect(g, min(ox - s, ox - 2 * s), cy - 5, max(ox - s, ox - 2 * s), cy - 5, "N")
     for dx, n in ((-2, 2), (0, 3), (2, 2)):  # forehead stripes
-        rect(g, cx + dx, cy - 6, cx + dx, cy - 7 + n, "S")
-    ellipse(g, cx, cy + 3.5, 4, 2.5, "B")   # muzzle
-    px(g, cx, cy + 2, "N")
-    px(g, cx, cy + 3, "O")
+        rect(g, cx + dx, cy - 5, cx + dx, cy - 6 + n, "S")
+    ellipse(g, cx, cy + 3, 3, 2, "B")       # muzzle
+    px(g, cx, cy + 1, "N")
+    px(g, cx, cy + 2, "O")
     for s in (-1, 1):
         ex = cx + s * 4
-        rect(g, ex - (s < 0), cy + 3, ex + (s > 0), cy + 3, "N")   # blush
+        rect(g, min(ex, ex + s), cy + 3, max(ex, ex + s), cy + 3, "N")   # blush
         if eye == "open":
             rect(g, ex, cy, ex, cy + 1, "E")
         elif eye == "closed":
@@ -98,7 +98,7 @@ def head(cx, cy, eye="open"):
         elif eye == "happy":
             px(g, ex - 1, cy + 1, "E"); px(g, ex, cy, "E"); px(g, ex + 1, cy + 1, "E")
         elif eye == "wide":
-            rect(g, ex - (s > 0), cy - 1, ex + (s < 0), cy + 1, "E")
+            rect(g, min(ex, ex - s), cy, max(ex, ex - s), cy + 1, "E")
     return outline(g)
 
 
@@ -118,7 +118,7 @@ def stand(lift=(0, 0, 0, 0), bob=0, sway=0, eye="open"):
     for x, l in ((6 + (bn > 0), bn), (16 + (fn > 0), fn)):
         rect(g, x, 24, x + 2, 28 - l, "F")
         rect(g, x, 28 - l, x + 2, 28 - l, "B")
-    return over(outline(g), head(21, 13 + bob, eye))
+    return over(outline(g), head(21, 14 + bob, eye))
 
 
 def sit(flick=0, eye="open"):
@@ -128,7 +128,7 @@ def sit(flick=0, eye="open"):
     ellipse(g, 16, 23, 3, 4, "B")
     rect(g, 12, 27, 14, 28, "B")
     rect(g, 18, 27, 20, 28, "B")
-    return over(outline(g), head(16, 11, eye))
+    return over(outline(g), head(16, 12, eye))
 
 
 def sleep(f):
@@ -141,7 +141,7 @@ def sleep(f):
     for y in range(29, S):            # flat on the floor
         rect(g, 0, y, S - 1, y, None)
     rect(g, 5, 27, 19, 28, "B")
-    g = over(outline(g), head(22, 21, "closed"))
+    g = over(outline(g), head(22, 23, "closed"))
     rect(g, 14, 26, 18, 28, "O")      # tucked front paw
     rect(g, 15, 27, 17, 28, "B")
     stamp(g, 25 + f, 7 - 2 * f, ("xxxx", "..x.", ".x..", "xxxx"), "Z")
@@ -163,7 +163,7 @@ def dangle(f, eye="open"):
     rect(g, 19 + f, 26, 20 + f, 30, "F")
     rect(g, 9, 19 - f, 11, 20 - f, "F")    # arms
     rect(g, 21, 19 - f, 23, 20 - f, "F")
-    return over(outline(g), head(16, 10, eye))
+    return over(outline(g), head(16, 11, eye))
 
 
 ROWS = [
