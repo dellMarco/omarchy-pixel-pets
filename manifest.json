@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "skrilexxx.pixel-pets",
+  "name": "Pixel Pets",
+  "version": "0.1.0",
+  "author": "skrilexxx",
+  "license": "MIT",
+  "description": "A pixel-art cat that lives on your desktop: she walks, sits, sleeps, and you can pet her or pick her up",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}
