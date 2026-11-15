@@ -1,5 +1,7 @@
 # Pixel Pets
 
+![Pixel Pets](preview.png)
+
 A pixel-art cat that lives on your [Omarchy](https://omarchy.org) desktop. She walks along the bottom of the
 screen, sits, naps, and stays out of your way: clicks next to her go straight through to your windows.
 
@@ -33,10 +35,17 @@ omarchy plugin add https://github.com/skrilexxx/omarchy-pixel-pets --enable
 
 Remove with `omarchy plugin remove skrilexxx.pixel-pets`.
 
+## Requirements
+
+Omarchy with its Quickshell-based shell (Hyprland). No other dependencies: the pet is plain QML and PNG
+sprites, and reads window and mouse positions from Hyprland's own IPC socket. She saves her settings to
+`~/.config/omarchy/pixel-pets.json` and doesn't touch any other config.
+
 ## Develop
 
 ```sh
 python3 tools/make_sprites.py   # redraw sprites/cat-<coat>.png (coats are in COATS)
+python3 tools/make_preview.py . preview.png   # rebuild the store preview from the sprites
 node tools/test_brain.js        # behaviour self-check
 omarchy plugin validate .
 
