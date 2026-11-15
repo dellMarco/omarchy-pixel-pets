@@ -183,19 +183,46 @@ def dangle(f, eye="open"):
     return over(outline(g), head(16, 11, eye))
 
 
-def climb(f):
-    """Climbing up, front view: paws reach up alternately, legs push."""
+def back_head(cx, cy):
+    """Back of the head: ears and tabby stripes, no face."""
     g = grid()
+    ellipse(g, cx, cy, 7, 5.5, "F")
+    for s in (-1, 1):
+        ox = cx + s * 6
+        for i in range(4):
+            rect(g, min(ox, ox - s * i), cy - 8 + i, max(ox, ox - s * i), cy - 8 + i, "F")
+        px(g, ox - s, cy - 6, "S")          # back of the ear
+    for dx, top, bot in ((-3, -4, 1), (0, -5, 4), (3, -4, 1)):
+        rect(g, cx + dx, cy + top, cx + dx, cy + bot, "S")
+    return outline(g)
+
+
+def climb(f):
+    """Climbing up the window, back to the viewer: paws reach up in turn, legs push, tail swings."""
     up = f % 2
-    for x, top in ((7, 3 + 4 * up), (24, 7 - 4 * up)):   # one arm reaching higher
-        rect(g, x, top, x + 1, 12, "F")
-        rect(g, x - 1 + (x > 16), top - 2, x + 1 + (x > 16), top - 1, "B")
-    tail(g, [(10, 26), (9, 27), (8 + up, 28), (8 + up, 29)])
-    ellipse(g, 16, 21, 5, 7, "F")
-    ellipse(g, 16, 22, 2.5, 4.5, "B")
-    rect(g, 12, 26 - 2 * up, 13, 30 - 2 * up, "F")
-    rect(g, 19, 24 + 2 * up, 20, 28 + 2 * up, "F")
-    return over(outline(g), head(16, 11, "open"))
+    sway = (0, 1, 0, -1)[f]
+    g = grid()
+    ellipse(g, 16, 17, 6, 7, "F")
+    for y, half in ((13, 3), (16, 4), (19, 4), (22, 3)):  # tabby bands across the back
+        rect(g, 16 - half, y, 16 + half, y, "S")
+    g = outline(g)
+    for x, lift in ((10, 2 * up), (20, 2 - 2 * up)):      # back legs push in turn
+        leg = grid()
+        rect(leg, x, 21 - lift, x + 2, 27 - lift, "F")
+        rect(leg, x, 27 - lift, x + 2, 27 - lift, "B")
+        g = over(g, outline(leg))
+    for side, top in ((-1, 2 + 4 * up), (1, 6 - 4 * up)):  # arms, one reaching higher
+        arm = grid()
+        ax = 16 + side * 9
+        rect(arm, min(ax, ax + side), top, max(ax, ax + side), 13, "F")
+        rect(arm, min(ax, 16 + side * 6), 12, max(ax, 16 + side * 6), 13, "F")   # shoulder
+        rect(arm, min(ax, ax + side), top, max(ax, ax + side), top + 1, "B")
+        g = over(g, outline(arm))
+    t = grid()
+    tail(t, [(16, 23), (16, 24), (17, 25), (17 + sway, 26), (18 + sway, 27), (18 + sway, 28),
+             (19 + 2 * sway, 29), (19 + 2 * sway, 30)])
+    g = over(g, outline(t))
+    return over(g, back_head(16, 8))
 
 
 PEEK_EDGE = 10   # rows of the peek frame above the window edge; Service.qml clips the rest

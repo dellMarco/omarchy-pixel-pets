@@ -8,7 +8,8 @@ screen, sits, naps, and stays out of your way: clicks next to her go straight th
 - **Double-click** her to give her a ball of yarn. She chases and bats it around; you can drag and throw it too.
 - Wiggle the **mouse** near the bottom of the screen and she may stalk and pounce on it.
 
-Now and then she climbs up behind one of your windows and peeks over its top edge, then climbs back down.
+Now and then she climbs up one of your windows (back to you, tail swinging), slips over its top edge and peeks
+back over it, then climbs back down.
 Click her while she peeks and she ducks; if the window closes or moves, she drops.
 
 Between all that she grooms, yawns, and stretches after naps.

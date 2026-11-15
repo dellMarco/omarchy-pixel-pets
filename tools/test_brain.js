@@ -42,10 +42,10 @@ const until = (mode, max = 30 * 60 * 30) => {
     B.tick(s, 1 / 30, wb, rand)
     assert(B.ANIMS[s.mode], "no animation for mode " + s.mode)
     assert(!(B.ON_LEDGE[was] && s.mode === "fall" && wb.ledges.length), "fell off a window that is still there")
-    if (s.mode === "climb" || s.mode === "descend") assert(s.y <= wb.floor && s.y >= win.y - wb.peek)
-    if (B.PEEKING[s.mode]) assert.strictEqual(s.clipBottom, win.y, "only the part above the edge shows")
-    else assert.strictEqual(s.clipBottom, Infinity)
-    if (!B.ON_LEDGE[s.mode]) assert.strictEqual(s.alpha, 1, "fully visible off the window")
+    if (s.mode === "climb" || s.mode === "descend") assert(s.y <= wb.floor && s.y >= win.y - wb.size - 1, "stays between the floor and just over the edge")
+    if (B.PEEKING[s.mode]) assert(s.clipBottom === win.y && s.clipTop === -Infinity, "only the part above the edge shows")
+    else if (B.ON_LEDGE[s.mode]) assert(s.clipTop === win.y && s.clipBottom === Infinity, "only the part below the edge shows")
+    else assert(s.clipTop === -Infinity && s.clipBottom === Infinity, "fully visible off the window")
   }
   assert.strictEqual(s.mode, mode, "never reached " + mode)
 }
@@ -53,12 +53,11 @@ until("climb")
 assert(s.x >= win.x && s.x + wb.size <= win.x + win.w, "climbs within the window")
 let climbTicks = 0
 while (s.mode === "climb") { B.tick(s, 1 / 30, wb, rand); climbTicks++ }
-assert(climbTicks / 30 > 5, "the climb should take a while, took " + (climbTicks / 30).toFixed(1) + "s")
+assert(climbTicks / 30 > 8, "the climb should take a while, took " + (climbTicks / 30).toFixed(1) + "s")
 until("peek")
 assert.strictEqual(s.y, win.y - wb.peek, "peeks with her ears and eyes above the edge")
-assert.strictEqual(s.alpha, 1)
 until("descend")
-assert.strictEqual(s.alpha, 0, "hidden behind the window on the way down")
+assert(s.y + wb.size <= win.y + 5, "comes back over the edge from behind it")
 until("idle", 30 * 20)
 assert.strictEqual(s.y, wb.floor, "back on the floor")
 
@@ -71,7 +70,7 @@ wb.ledges = [] // window closes
 for (let i = 0; i < 90 && s.mode !== "idle"; i++) B.tick(s, 1 / 30, wb, rand)
 assert.strictEqual(s.mode, "idle", "falls when the window goes away")
 assert.strictEqual(s.y, wb.floor)
-assert.strictEqual(s.alpha, 1)
+assert(s.clipTop === -Infinity && s.clipBottom === Infinity)
 
 // Chasing the mouse
 const cb = { w: 1824, floor: 984, size: 96, peek: 30, ledges: [], ballSize: 36, cursor: null }

@@ -134,9 +134,11 @@ Item {
       pet.y = Math.round(cat.y)
       pet.dir = cat.dir
       pet.mode = cat.mode
-      pet.alpha = cat.alpha
-      // Behind a window only what is above its edge shows; hidden entirely while she climbs out of sight.
-      pet.shownHeight = cat.alpha > 0 ? Math.max(0, Math.min(root.size, Math.round(cat.clipBottom - cat.y))) : 0
+      // On a window, the top edge hides whatever part of her is on the far side of it.
+      var top = Math.max(0, Math.min(root.size, Math.round(cat.clipTop - cat.y)))
+      var bottom = Math.max(top, Math.min(root.size, Math.round(cat.clipBottom - cat.y)))
+      pet.shownTop = top
+      pet.shownHeight = bottom - top
       if (cat.ball) {
         ball.x = Math.round(cat.ball.x)
         ball.y = Math.round(cat.ball.y)
@@ -163,7 +165,7 @@ Item {
 
       property string mode: "idle"
       property int dir: 1
-      property real alpha: 1
+      property int shownTop: 0
       property int shownHeight: root.size
       readonly property var anim: Brain.ANIMS[mode]
 
@@ -173,12 +175,13 @@ Item {
       // The visible part of her, which is also all that takes clicks.
       Item {
         id: shownPart
+        y: pet.shownTop
         width: root.size
         height: pet.shownHeight
         clip: true
-        opacity: pet.alpha
 
         AnimatedSprite {
+          y: -pet.shownTop
           width: root.size
           height: root.size
           source: root.spriteUrl

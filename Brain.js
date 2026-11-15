@@ -37,8 +37,7 @@ var SPEED = 60          // px/s walking
 var RUN_SPEED = 150     // px/s chasing the ball
 var GRAVITY = 1800      // px/s^2
 var HANG_CHANCE = 0.15  // share of idle decisions that go for a window
-var CLIMB_SPEED = 140   // px/s climbing up / down behind a window
-var FADE_TIME = 0.7     // s to slip behind the window (fade out) or come back out (fade in)
+var CLIMB_SPEED = 90    // px/s climbing up / down the front of a window
 var PEEK_SPEED = 25     // px/s rising over / sinking below the window edge
 
 var CURSOR_RANGE = 500  // px: how far away she notices the mouse
@@ -54,7 +53,9 @@ var BALL_FRICTION = 1.5 // rolling slowdown per second on the floor
 
 // Modes in which something interesting (ball, mouse) can catch her attention.
 var REACTIVE = { idle: true, sit: true, walk: true, run: true, groom: true, yawn: true }
-// The trip up behind a window and back. While on it she is clipped below clipBottom (the window edge).
+// The trip up a window and back: climb the front (back to the viewer), go over the top edge,
+// peek over it from behind, come back over and climb down. Only the part of her between
+// clipTop and clipBottom is drawn: the edge hides whatever is on the far side of it.
 var ON_LEDGE = { climb: true, peekup: true, peek: true, peekdown: true, descend: true }
 var PEEKING = { peekup: true, peek: true, peekdown: true }
 
@@ -62,7 +63,7 @@ function create(x, y) {
   return {
     mode: "idle", x: x, y: y, dir: 1, t: 0, until: 2, vy: 0, targetX: x, goal: null,
     ball: null, lastCursor: null, cursorStill: Infinity, pounces: 0, bored: 0, from: x, to: x,
-    alpha: 1, clipBottom: Infinity   // how visible she is; nothing of her is drawn below clipBottom
+    clipTop: -Infinity, clipBottom: Infinity
   }
 }
 
@@ -76,8 +77,10 @@ function setMode(s, mode, duration) {
   s.t = 0
   s.until = duration
   if (!ON_LEDGE[mode]) s.goal = null
-  if (!PEEKING[mode]) s.clipBottom = Infinity
-  if (!ON_LEDGE[mode] || PEEKING[mode]) s.alpha = 1
+  if (!ON_LEDGE[mode]) {
+    s.clipTop = -Infinity
+    s.clipBottom = Infinity
+  }
 }
 
 function walkTo(s, x) {
@@ -112,7 +115,12 @@ function pounceAt(s, b) {
 function next(s, b, rand) {
   var m = s.mode
   if (m === "petted") return setMode(s, "sit", 3 + rand() * 5)
-  if (m === "walk" && s.goal !== null) return setMode(s, "climb", Infinity)
+  if (m === "walk" && s.goal !== null) {
+    var l = ledge(s, b)
+    setMode(s, "climb", Infinity)
+    if (l) s.clipTop = l.y
+    return
+  }
   if (m === "sleep") return setMode(s, "stretch", 1.5)
   if (m === "crouch") return cursorNear(s, b) ? pounceAt(s, b) : setMode(s, "idle", 1)
   if (m === "bat") return setMode(s, "idle", 0.3)
@@ -253,14 +261,12 @@ function tick(s, dt, b, rand) {
   return s
 }
 
-// Up behind the window (fading out), peek over the edge, then back down (fading in).
 function climbStep(s, b, l, dt, rand) {
   s.t += dt
   var top = l.y - b.peek
   if (s.mode === "climb") {
     s.y -= CLIMB_SPEED * dt
-    s.alpha = Math.max(0, 1 - s.t / FADE_TIME)
-    if (s.y <= l.y) {
+    if (s.y + b.size <= l.y) {   // all the way over the edge
       s.y = l.y
       setMode(s, "peekup", Infinity)
     }
@@ -275,19 +281,24 @@ function climbStep(s, b, l, dt, rand) {
     if (s.t >= s.until) setMode(s, "peekdown", Infinity)
   } else if (s.mode === "peekdown") {
     s.y += PEEK_SPEED * dt
-    if (s.y >= l.y) {
+    if (s.y >= l.y) {   // back over the edge to the front
+      s.y = l.y - b.size
       setMode(s, "descend", Infinity)
-      s.alpha = 0
     }
   } else {
     s.y += CLIMB_SPEED * dt
-    s.alpha = Math.max(0, Math.min(1, 1 - (b.floor - s.y) / (CLIMB_SPEED * FADE_TIME)))
     if (s.y >= b.floor) {
       s.y = b.floor
       setMode(s, "idle", 1 + rand() * 2)
     }
   }
-  if (PEEKING[s.mode]) s.clipBottom = l.y
+  if (PEEKING[s.mode]) {
+    s.clipTop = -Infinity
+    s.clipBottom = l.y
+  } else if (ON_LEDGE[s.mode]) {
+    s.clipTop = l.y
+    s.clipBottom = Infinity
+  }
 }
 
 function pet(s) {
