@@ -9,14 +9,14 @@ import os, struct, zlib
 
 S = 32
 PALETTE = {
-    "O": (43, 34, 51),     # outline
-    "F": (242, 166, 90),   # fur
-    "S": (217, 136, 69),   # fur shade (far legs, tail tip)
-    "B": (255, 241, 220),  # belly / muzzle
-    "E": (43, 34, 51),     # eye
-    "N": (242, 140, 160),  # nose
+    "O": (150, 88, 42),    # outline (dark shade of the fur, not black)
+    "F": (245, 170, 80),   # fur
+    "S": (214, 128, 52),   # stripes / far legs
+    "B": (255, 246, 232),  # belly / muzzle / paws
+    "E": (62, 42, 42),     # eyes
+    "N": (245, 150, 160),  # nose, blush, inner ear
     "H": (229, 72, 77),    # heart
-    "Z": (255, 255, 255),  # zzz
+    "Z": (120, 150, 220),  # zzz
 }
 
 
@@ -48,113 +48,124 @@ def outline(g):
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))]
     for x, y in edge:
         g[y][x] = "O"
+    return g
 
 
-def head(g, cx, cy, eye="open"):
-    ellipse(g, cx, cy, 5, 4.5, "F")
-    for ex, tip in ((cx - 3, cx - 3), (cx + 2, cx + 3)):  # ears
-        rect(g, ex, cy - 5, ex + 1, cy - 5, "F")
-        px(g, tip, cy - 6, "F")
-    rect(g, cx + 3, cy + 2, cx + 4, cy + 2, "B")
-    px(g, cx + 5, cy + 1, "N")
-    ex = cx + 2
-    if eye == "open":
-        rect(g, ex, cy - 1, ex, cy, "E")
-    elif eye == "closed":
-        rect(g, ex - 1, cy, ex, cy, "E")
-    elif eye == "happy":
-        px(g, ex - 1, cy, "E"); px(g, ex, cy - 1, "E"); px(g, ex + 1, cy, "E")
-    elif eye == "wide":
-        rect(g, ex - 1, cy - 1, ex, cy, "E")
-
-
-def belly(g, y0):
-    for y in range(y0, S):
+def over(base, top):
+    """Paint an (outlined) layer on top of another, so parts keep their own outline."""
+    for y in range(S):
         for x in range(S):
-            if g[y][x] == "F":
-                g[y][x] = "B"
+            if top[y][x]:
+                base[y][x] = top[y][x]
+    return base
 
 
-def stand(lift=(0, 0, 0, 0), bob=0, tail=0, eye="open"):
+def stamp(g, x0, y0, rows, c):
+    for dy, row in enumerate(rows):
+        for dx, ch in enumerate(row):
+            if ch == "x":
+                px(g, x0 + dx, y0 + dy, c)
+
+
+def tail(g, points):
+    """2px thick striped tail through the given points."""
+    for i, (x, y) in enumerate(points):
+        rect(g, x, y, x + 1, y, "S" if i % 3 == 2 else "F")
+
+
+def head(cx, cy, eye="open"):
+    """Big front-facing head, as its own outlined layer."""
+    g = grid()
+    ellipse(g, cx, cy, 8, 6.5, "F")
+    for s in (-1, 1):                       # ears
+        for i, half in enumerate((0, 1, 1, 2)):
+            rect(g, cx + s * 6 - half, cy - 9 + i, cx + s * 6 + half, cy - 9 + i, "F")
+        rect(g, cx + s * 6, cy - 8, cx + s * 6, cy - 7, "N")
+    for dx, n in ((-2, 2), (0, 3), (2, 2)):  # forehead stripes
+        rect(g, cx + dx, cy - 6, cx + dx, cy - 7 + n, "S")
+    ellipse(g, cx, cy + 3.5, 4, 2.5, "B")   # muzzle
+    px(g, cx, cy + 2, "N")
+    px(g, cx, cy + 3, "O")
+    for s in (-1, 1):
+        ex = cx + s * 4
+        rect(g, ex - (s < 0), cy + 3, ex + (s > 0), cy + 3, "N")   # blush
+        if eye == "open":
+            rect(g, ex, cy, ex, cy + 1, "E")
+        elif eye == "closed":
+            rect(g, ex - 1, cy + 1, ex + 1, cy + 1, "E")
+        elif eye == "happy":
+            px(g, ex - 1, cy + 1, "E"); px(g, ex, cy, "E"); px(g, ex + 1, cy + 1, "E")
+        elif eye == "wide":
+            rect(g, ex - (s > 0), cy - 1, ex + (s < 0), cy + 1, "E")
+    return outline(g)
+
+
+def stand(lift=(0, 0, 0, 0), bob=0, sway=0, eye="open"):
     """lift = (back near, back far, front near, front far) in px."""
     g = grid()
     bn, bf, fn, ff = lift
-    rect(g, 11 + (bf > 0), 23, 12 + (bf > 0), 28 - bf, "S")
-    rect(g, 21 + (ff > 0), 23, 22 + (ff > 0), 28 - ff, "S")
-    ellipse(g, 14, 20 + bob, 8, 4.5, "F")
-    belly(g, 23 + bob)
-    for x, y in ((6, 18), (5, 17), (4, 16), (4, 15), (3 + tail, 14), (3 + tail, 13), (4 + tail, 12)):
-        px(g, x, y + bob, "F" if y > 13 else "S")
-    rect(g, 8 + (bn > 0), 23, 9 + (bn > 0), 28 - bn, "F")
-    rect(g, 18 + (fn > 0), 23, 19 + (fn > 0), 28 - fn, "F")
-    head(g, 23, 14 + bob, eye)
-    outline(g)
-    return g
+    rect(g, 11 + (bf > 0), 24, 12 + (bf > 0), 28 - bf, "S")
+    rect(g, 20 + (ff > 0), 24, 21 + (ff > 0), 28 - ff, "S")
+    ellipse(g, 13, 21 + bob, 8, 5, "F")
+    for y in range(24 + bob, S):
+        for x in range(S):
+            if g[y][x] == "F":
+                g[y][x] = "B"
+    tail(g, [(4, 19 + bob), (3, 18 + bob), (2, 17 + bob), (2, 16 + bob), (2, 15 + bob),
+             (2 + sway, 14 + bob), (3 + sway, 13 + bob)])
+    for x, l in ((6 + (bn > 0), bn), (16 + (fn > 0), fn)):
+        rect(g, x, 24, x + 2, 28 - l, "F")
+        rect(g, x, 28 - l, x + 2, 28 - l, "B")
+    return over(outline(g), head(21, 13 + bob, eye))
 
 
-def sit(tail=0, eye="open"):
+def sit(flick=0, eye="open"):
     g = grid()
-    for x, y in ((7, 27), (6, 27), (5, 27), (4, 27), (3, 26 - tail), (2, 25 - tail)):
-        px(g, x, y, "F" if x > 3 else "S")
-    ellipse(g, 13, 21.5, 6, 6.5, "F")
-    rect(g, 9, 27, 13, 28, "B")       # haunch foot
-    rect(g, 16, 20, 17, 28, "F")      # front legs
-    rect(g, 19, 20, 20, 28, "S")
-    rect(g, 15, 17, 17, 21, "B")      # chest
-    head(g, 18, 11, eye)
-    outline(g)
-    return g
+    tail(g, [(9, 27), (7, 27), (6, 26), (5, 25), (4, 24), (4, 23 - flick), (5, 22 - flick)])
+    ellipse(g, 16, 22.5, 6.5, 6, "F")
+    ellipse(g, 16, 23, 3, 4, "B")
+    rect(g, 12, 27, 14, 28, "B")
+    rect(g, 18, 27, 20, 28, "B")
+    return over(outline(g), head(16, 11, eye))
 
 
 def sleep(f):
     g = grid()
-    ry = 4 + 0.5 * (f in (1, 2))      # breathing
-    ellipse(g, 14, 28.5 - ry, 10, ry, "F")
-    rect(g, 7, 27, 16, 27, "S")       # tail wrapped around
-    head(g, 21, 23, "closed")
-    outline(g)
-    zx, zy = 26 + f, 15 - 2 * f
-    for dy, row in enumerate(("xxxx", "..x.", ".x..", "xxxx")):
-        for dx, ch in enumerate(row):
-            if ch == "x":
-                px(g, zx - 1 + dx, zy + dy, "Z")
+    ry = 4.5 + 0.5 * (f in (1, 2))    # breathing
+    tail(g, [(3, 23), (2, 22), (1, 21), (1, 20), (2, 19)])
+    ellipse(g, 13, 28.5 - ry, 10.5, ry, "F")
+    g = over(outline(g), head(21, 21, "closed"))
+    stamp(g, 25 + f, 7 - 2 * f, ("xxxx", "..x.", ".x..", "xxxx"), "Z")
     return g
 
 
 def petted(f):
-    g = sit(tail=f % 2, eye="happy")
-    for dy, row in enumerate((".x.x.", "xxxxx", ".xxx.", "..x..")):
-        for dx, ch in enumerate(row):
-            if ch == "x":
-                px(g, 25 + dx, 5 - f + dy, "H")
+    g = sit(flick=f % 2, eye="happy")
+    stamp(g, 27, 5 - f, (".x.x.", "xxxxx", ".xxx.", "..x.."), "H")
     return g
 
 
-def dangle(f, arms_up=False):
+def dangle(f, eye="open"):
     g = grid()
-    for x, y in ((12, 26), (11, 27), (10 + f, 28), (10 + f, 29)):
-        px(g, x, y, "S")
-    ellipse(g, 16, 18, 4.5, 8, "F")
-    rect(g, 14, 15, 17, 23, "B")
-    rect(g, 13 - f, 24, 14 - f, 29, "F")   # legs
-    rect(g, 18 + f, 24, 19 + f, 29, "F")
-    head(g, 16, 8, "wide")
-    ax, ay = (8, 7) if arms_up else (10, 15)
-    rect(g, ax, ay, ax + 1, ay + 4, "F")   # arms
-    rect(g, 31 - ax, ay, 32 - ax, ay + 4, "F")
-    outline(g)
-    return g
+    tail(g, [(10, 26), (9, 27), (8 + f, 28), (8 + f, 29)])
+    ellipse(g, 16, 21, 5, 7, "F")
+    ellipse(g, 16, 22, 2.5, 4.5, "B")
+    rect(g, 12 - f, 26, 13 - f, 30, "F")   # legs
+    rect(g, 19 + f, 26, 20 + f, 30, "F")
+    rect(g, 9, 19 - f, 11, 20 - f, "F")    # arms
+    rect(g, 21, 19 - f, 23, 20 - f, "F")
+    return over(outline(g), head(16, 10, eye))
 
 
 ROWS = [
-    ("idle",   [stand(), stand(tail=1), stand(), stand(tail=1, eye="closed")]),
-    ("walk",   [stand((0, 2, 2, 0)), stand((0, 1, 1, 0), tail=1), stand(bob=1),
-                stand((2, 0, 0, 2)), stand((1, 0, 0, 1), tail=1), stand(bob=1)]),
-    ("sit",    [sit(), sit(tail=1)]),
+    ("idle",   [stand(), stand(sway=1), stand(), stand(sway=1, eye="closed")]),
+    ("walk",   [stand((0, 2, 2, 0)), stand((0, 1, 1, 0), sway=1), stand(bob=1),
+                stand((2, 0, 0, 2)), stand((1, 0, 0, 1), sway=1), stand(bob=1)]),
+    ("sit",    [sit(), sit(flick=1)]),
     ("sleep",  [sleep(f) for f in range(4)]),
     ("petted", [petted(f) for f in range(4)]),
     ("held",   [dangle(0), dangle(1)]),
-    ("fall",   [dangle(0, True), dangle(1, True)]),
+    ("fall",   [dangle(0, "wide"), dangle(1, "wide")]),
 ]
 
 
