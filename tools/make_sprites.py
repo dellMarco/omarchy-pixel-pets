@@ -142,8 +142,8 @@ def sleep(f):
         rect(g, 0, y, S - 1, y, None)
     rect(g, 5, 27, 19, 28, "B")
     g = over(outline(g), head(22, 23, "closed"))
-    rect(g, 14, 26, 18, 28, "O")      # tucked front paw
-    rect(g, 15, 27, 17, 28, "B")
+    rect(g, 9, 26, 14, 28, "O")       # tucked front paw, just behind the chin
+    rect(g, 10, 27, 13, 28, "B")
     stamp(g, 25 + f, 7 - 2 * f, ("xxxx", "..x.", ".x..", "xxxx"), "Z")
     return g
 
