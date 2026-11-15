@@ -77,10 +77,12 @@ def head(cx, cy, eye="open"):
     """Big front-facing head, as its own outlined layer."""
     g = grid()
     ellipse(g, cx, cy, 8, 6.5, "F")
-    for s in (-1, 1):                       # ears
-        for i, half in enumerate((0, 1, 1, 2)):
-            rect(g, cx + s * 6 - half, cy - 9 + i, cx + s * 6 + half, cy - 9 + i, "F")
-        rect(g, cx + s * 6, cy - 8, cx + s * 6, cy - 7, "N")
+    for s in (-1, 1):                       # ears: sharp triangles, tip at the outer edge
+        ox = cx + s * 7
+        for i in range(4):
+            rect(g, min(ox, ox - s * i), cy - 9 + i, max(ox, ox - s * i), cy - 9 + i, "F")
+        px(g, ox - s, cy - 7, "N")
+        rect(g, min(ox - s, ox - 2 * s), cy - 6, max(ox - s, ox - 2 * s), cy - 6, "N")
     for dx, n in ((-2, 2), (0, 3), (2, 2)):  # forehead stripes
         rect(g, cx + dx, cy - 6, cx + dx, cy - 7 + n, "S")
     ellipse(g, cx, cy + 3.5, 4, 2.5, "B")   # muzzle
