@@ -8,8 +8,8 @@ screen, sits, naps, and stays out of your way: clicks next to her go straight th
 - **Double-click** her to give her a ball of yarn. She chases and bats it around; you can drag and throw it too.
 - Wiggle the **mouse** near the bottom of the screen and she may stalk and pounce on it.
 
-Now and then she jumps up and hangs from the top edge of one of your windows, then drops back down. She lets
-go if the window closes, moves away, or you click her.
+Now and then she climbs up behind one of your windows and peeks over its top edge, then climbs back down.
+Click her while she peeks and she ducks; if the window closes or moves, she drops.
 
 Between all that she grooms, yawns, and stretches after naps.
 
@@ -18,7 +18,7 @@ She hides under fullscreen apps.
 ## Settings
 
 Click the cat icon in the bar to open her settings: name, coat (orange, grey, tuxedo, white, cream),
-size, energy (lazy to playful), whether she chases the mouse or hangs from windows, and a button to give her
+size, energy (lazy to playful), whether she chases the mouse or climbs windows, and a button to give her
 a yarn ball. Right-click the icon to hide or show her. Her name pops up when you pet her.
 
 Settings are saved in `~/.config/omarchy/pixel-pets.json`.

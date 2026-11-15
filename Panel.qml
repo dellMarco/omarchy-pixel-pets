@@ -218,7 +218,7 @@ Panel {
           }
           Toggle {
             width: parent.width
-            label: "Hang from windows"
+            label: "Peek over windows"
             checked: root.store ? root.store.hangOnWindows : false
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily

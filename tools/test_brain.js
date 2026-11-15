@@ -33,36 +33,48 @@ assert.strictEqual(s.mode, "idle")
 assert.strictEqual(s.y, bounds.floor)
 assert.strictEqual(s.x, 0, "dropped off-screen pet is clamped back")
 
-// Hanging from a window edge
+// Climbing up behind a window and peeking over its top edge
 const win = { id: "0xabc", x: 200, y: 38, w: 900 }
-const wb = { w: 1824, floor: 984, size: 96, grip: 6, ledges: [win] }
-let hung = false
-for (let i = 0; i < 30 * 60 * 30 && !hung; i++) {
-  const was = s.mode
-  B.tick(s, 1 / 30, wb, rand)
-  assert(!(was === "jump" && s.mode === "fall"), "jumped at a spot outside the window")
-  assert(B.ANIMS[s.mode], "no animation for mode " + s.mode)
-  hung = s.mode === "hang"
+const wb = { w: 1824, floor: 984, size: 96, peek: 30, ledges: [win] }
+const until = (mode, max = 30 * 60 * 30) => {
+  for (let i = 0; i < max && s.mode !== mode; i++) {
+    const was = s.mode
+    B.tick(s, 1 / 30, wb, rand)
+    assert(B.ANIMS[s.mode], "no animation for mode " + s.mode)
+    assert(!(B.ON_LEDGE[was] && s.mode === "fall" && wb.ledges.length), "fell off a window that is still there")
+    if (s.mode === "climb" || s.mode === "descend") assert(s.y <= wb.floor && s.y >= win.y - wb.peek)
+    if (B.PEEKING[s.mode]) assert.strictEqual(s.clipBottom, win.y, "only the part above the edge shows")
+    else assert.strictEqual(s.clipBottom, Infinity)
+    if (!B.ON_LEDGE[s.mode]) assert.strictEqual(s.alpha, 1, "fully visible off the window")
+  }
+  assert.strictEqual(s.mode, mode, "never reached " + mode)
 }
-assert(hung, "never hung from the window")
-assert.strictEqual(s.y, win.y - wb.grip, "hangs with her paws on the edge")
-assert(s.x >= win.x && s.x + wb.size <= win.x + win.w, "hangs within the window")
+until("climb")
+assert(s.x >= win.x && s.x + wb.size <= win.x + win.w, "climbs within the window")
+let climbTicks = 0
+while (s.mode === "climb") { B.tick(s, 1 / 30, wb, rand); climbTicks++ }
+assert(climbTicks / 30 > 5, "the climb should take a while, took " + (climbTicks / 30).toFixed(1) + "s")
+until("peek")
+assert.strictEqual(s.y, win.y - wb.peek, "peeks with her ears and eyes above the edge")
+assert.strictEqual(s.alpha, 1)
+until("descend")
+assert.strictEqual(s.alpha, 0, "hidden behind the window on the way down")
+until("idle", 30 * 20)
+assert.strictEqual(s.y, wb.floor, "back on the floor")
 
+until("peek")
+B.pet(s)
+assert.strictEqual(s.mode, "peekdown", "petting her while she peeks makes her duck")
+
+until("peek")
 wb.ledges = [] // window closes
 for (let i = 0; i < 90 && s.mode !== "idle"; i++) B.tick(s, 1 / 30, wb, rand)
 assert.strictEqual(s.mode, "idle", "falls when the window goes away")
 assert.strictEqual(s.y, wb.floor)
-
-wb.ledges = [win] // lets go by herself after a while
-while (s.mode !== "hang") B.tick(s, 1 / 30, wb, rand)
-for (let i = 0; i < 30 * 20 && s.mode === "hang"; i++) B.tick(s, 1 / 30, wb, rand)
-assert.strictEqual(s.mode, "fall", "lets go after hanging")
-while (s.mode !== "hang") B.tick(s, 1 / 30, wb, rand)
-B.pet(s)
-assert.strictEqual(s.mode, "fall", "petting a hanging cat makes her let go")
+assert.strictEqual(s.alpha, 1)
 
 // Chasing the mouse
-const cb = { w: 1824, floor: 984, size: 96, grip: 6, ledges: [], ballSize: 36, cursor: null }
+const cb = { w: 1824, floor: 984, size: 96, peek: 30, ledges: [], ballSize: 36, cursor: null }
 const c = B.create(500, cb.floor)
 let crouched = false, pounced = false, bored = false
 for (let i = 0; i < 30 * 60; i++) {
@@ -107,7 +119,7 @@ assert.notStrictEqual(k.mode, "run", "stops chasing once the ball is gone")
 
 // Energy: a lazy cat sleeps more than a playful one
 function sleepShare(energy) {
-  const eb = { w: 1824, floor: 984, size: 96, grip: 6, ledges: [], ballSize: 36, cursor: null, energy }
+  const eb = { w: 1824, floor: 984, size: 96, peek: 30, ledges: [], ballSize: 36, cursor: null, energy }
   const e = B.create(500, eb.floor)
   let asleep = 0
   const ticks = 30 * 60 * 60

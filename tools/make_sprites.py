@@ -111,6 +111,9 @@ def head(cx, cy, eye="open"):
             px(g, ex - 1, cy + 1, "E"); px(g, ex, cy, "E"); px(g, ex + 1, cy + 1, "E")
         elif eye == "wide":
             rect(g, min(ex, ex - s), cy, max(ex, ex - s), cy + 1, "E")
+        elif eye in ("left", "right"):
+            d = -1 if eye == "left" else 1
+            rect(g, ex + d, cy, ex + d, cy + 1, "E")
     return outline(g)
 
 
@@ -178,6 +181,36 @@ def dangle(f, eye="open"):
     rect(g, 9, 19 - f, 11, 20 - f, "F")    # arms
     rect(g, 21, 19 - f, 23, 20 - f, "F")
     return over(outline(g), head(16, 11, eye))
+
+
+def climb(f):
+    """Climbing up, front view: paws reach up alternately, legs push."""
+    g = grid()
+    up = f % 2
+    for x, top in ((7, 3 + 4 * up), (24, 7 - 4 * up)):   # one arm reaching higher
+        rect(g, x, top, x + 1, 12, "F")
+        rect(g, x - 1 + (x > 16), top - 2, x + 1 + (x > 16), top - 1, "B")
+    tail(g, [(10, 26), (9, 27), (8 + up, 28), (8 + up, 29)])
+    ellipse(g, 16, 21, 5, 7, "F")
+    ellipse(g, 16, 22, 2.5, 4.5, "B")
+    rect(g, 12, 26 - 2 * up, 13, 30 - 2 * up, "F")
+    rect(g, 19, 24 + 2 * up, 20, 28 + 2 * up, "F")
+    return over(outline(g), head(16, 11, "open"))
+
+
+PEEK_EDGE = 10   # rows of the peek frame above the window edge; Service.qml clips the rest
+
+
+def peek(eye="open"):
+    """Peeking over a window's top edge: ears, eyes and paws. Rows from PEEK_EDGE down are behind the window."""
+    g = head(16, 8, eye)
+    for x in (3, 26):                       # paws gripping the edge
+        p = grid()
+        rect(p, x, PEEK_EDGE - 2, x + 2, PEEK_EDGE + 1, "B")
+        g = over(g, outline(p))
+    for y in range(PEEK_EDGE, S):
+        rect(g, 0, y, S - 1, y, None)
+    return g
 
 
 def hang(swing=0, eye="open"):
@@ -294,8 +327,8 @@ ROWS = [
     ("petted", [petted(f) for f in range(4)]),
     ("held",   [dangle(0), dangle(1)]),
     ("fall",   [dangle(0, "wide"), dangle(1, "wide")]),
-    ("jump",   [hang(1, "wide"), hang(-1, "wide")]),
-    ("hang",   [hang(s) for s in (0, 1, 0, -1)]),
+    ("climb",  [climb(f) for f in range(4)]),
+    ("peek",   [peek(e) for e in ("open", "left", "open", "right", "closed")]),
     ("crouch", [crouch(0), crouch(1)]),
     ("pounce", [pounce(0), pounce(1)]),
     ("bat",    [bat(0), bat(1)]),

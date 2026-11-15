@@ -49,7 +49,7 @@ Item {
       w: width - root.size,
       floor: height - root.size,
       size: root.size,
-      grip: 2 * root.pixelScale,
+      peek: 10 * root.pixelScale,   // rows of the peek frame above the edge (PEEK_EDGE in make_sprites.py)
       ledges: store.hangOnWindows ? ledges : [],
       ballSize: root.ballSize,
       cursor: store.chaseMouse ? cursor : null,
@@ -125,7 +125,7 @@ Item {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     // Only the pet takes input; everything else clicks through to the apps below.
     mask: Region {
-      item: pet
+      item: shownPart
       Region { item: ball }
     }
 
@@ -134,6 +134,9 @@ Item {
       pet.y = Math.round(cat.y)
       pet.dir = cat.dir
       pet.mode = cat.mode
+      pet.alpha = cat.alpha
+      // Behind a window only what is above its edge shows; hidden entirely while she climbs out of sight.
+      pet.shownHeight = cat.alpha > 0 ? Math.max(0, Math.min(root.size, Math.round(cat.clipBottom - cat.y))) : 0
       if (cat.ball) {
         ball.x = Math.round(cat.ball.x)
         ball.y = Math.round(cat.ball.y)
@@ -160,23 +163,35 @@ Item {
 
       property string mode: "idle"
       property int dir: 1
+      property real alpha: 1
+      property int shownHeight: root.size
       readonly property var anim: Brain.ANIMS[mode]
 
       width: root.size
       height: root.size
 
-      AnimatedSprite {
-        anchors.fill: parent
-        source: root.spriteUrl
-        frameWidth: 32
-        frameHeight: 32
-        frameX: 0
-        frameY: pet.anim.row * 32
-        frameCount: pet.anim.frames
-        frameRate: pet.anim.fps
-        interpolate: false
-        smooth: false
-        transform: Scale { origin.x: root.size / 2; xScale: pet.dir }
+      // The visible part of her, which is also all that takes clicks.
+      Item {
+        id: shownPart
+        width: root.size
+        height: pet.shownHeight
+        clip: true
+        opacity: pet.alpha
+
+        AnimatedSprite {
+          width: root.size
+          height: root.size
+          source: root.spriteUrl
+          frameWidth: 32
+          frameHeight: 32
+          frameX: 0
+          frameY: pet.anim.row * 32
+          frameCount: pet.anim.frames
+          frameRate: pet.anim.fps
+          interpolate: false
+          smooth: false
+          transform: Scale { origin.x: root.size / 2; xScale: pet.dir }
+        }
       }
 
       MouseArea {
