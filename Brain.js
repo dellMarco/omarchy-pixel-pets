@@ -118,12 +118,16 @@ function next(s, b, rand) {
     s.goal = l.id
     return
   }
+  // energy 0 = lazy (naps a lot), 1 = playful (walks a lot, short naps)
+  var e = b.energy === undefined ? 0.5 : b.energy
+  var walk = 0.25 + 0.3 * e
+  var sleep = 0.03 + 0.2 * (1 - e)
   var r = rand()
-  if (r < 0.4) walkTo(s, rand() * b.w)
-  else if (r < 0.6) setMode(s, "sit", 3 + rand() * 5)
-  else if (r < 0.72) setMode(s, "groom", 3 + rand() * 3)
-  else if (r < 0.8) setMode(s, "yawn", 1.5)
-  else if (r < 0.9) setMode(s, "sleep", 20 + rand() * 40)
+  if (r < walk) walkTo(s, rand() * b.w)
+  else if ((r -= walk) < 0.2) setMode(s, "sit", 3 + rand() * 5)
+  else if ((r -= 0.2) < 0.12) setMode(s, "groom", 3 + rand() * 3)
+  else if ((r -= 0.12) < 0.08) setMode(s, "yawn", 1.5)
+  else if ((r -= 0.08) < sleep) setMode(s, "sleep", (20 + rand() * 40) * (1.5 - e))
   else setMode(s, "idle", 1 + rand() * 3)
 }
 

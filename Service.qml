@@ -8,9 +8,37 @@ import "Brain.js" as Brain
 Item {
   id: root
 
-  property int pixelScale: 3
+  // Settings, edited from the bar panel (Panel.qml) and saved to disk.
+  readonly property alias settings: store
+  readonly property string spriteUrl: Qt.resolvedUrl("sprites/cat-" + store.coat + ".png")
+  readonly property int pixelScale: ({ small: 2, medium: 3, large: 4 })[store.size] || 3
   readonly property int size: 32 * pixelScale
   readonly property int ballSize: 12 * pixelScale
+
+  function giveBall() {
+    if (!win.cat || !store.shown) return
+    Brain.spawnBall(win.cat, win.bounds)
+    win.sync()
+  }
+
+  FileView {
+    path: Quickshell.env("HOME") + "/.config/omarchy/pixel-pets.json"
+    watchChanges: true
+    onFileChanged: reload()
+    onAdapterUpdated: writeAdapter()
+    onLoadFailed: error => { if (error === FileViewError.FileNotFound) writeAdapter() }
+
+    JsonAdapter {
+      id: store
+      property string name: "Mochi"
+      property string coat: "orange"
+      property string size: "medium"
+      property real energy: 0.5
+      property bool shown: true
+      property bool chaseMouse: true
+      property bool hangOnWindows: true
+    }
+  }
 
   PanelWindow {
     id: win
@@ -22,9 +50,10 @@ Item {
       floor: height - root.size,
       size: root.size,
       grip: 2 * root.pixelScale,
-      ledges: ledges,
+      ledges: store.hangOnWindows ? ledges : [],
       ballSize: root.ballSize,
-      cursor: cursor
+      cursor: store.chaseMouse ? cursor : null,
+      energy: store.energy
     })
 
     // Mouse position in this window's coordinates, or null when it is on another screen.
@@ -36,6 +65,8 @@ Item {
       parser: SplitParser {
         splitMarker: ""
         onRead: data => {
+          // Hang up ourselves: if Hyprland closes first, Quickshell logs a warning per poll.
+          cursorSocket.connected = false
           var m = /(-?\d+),\s*(-?\d+)/.exec(data)
           var mon = Hyprland.monitorFor(win.screen)
           if (!m || !mon) return
@@ -49,7 +80,7 @@ Item {
       interval: 100
       repeat: true
       // Only while she could react to it.
-      running: win.cat !== null && Brain.watchesCursor(pet.mode)
+      running: win.cat !== null && store.shown && store.chaseMouse && Brain.watchesCursor(pet.mode)
       onRunningChanged: if (!running) win.cursor = null
       onTriggered: if (!cursorSocket.connected) cursorSocket.connected = true
     }
@@ -85,6 +116,7 @@ Item {
       onTriggered: { Hyprland.refreshToplevels(); win.refreshLedges() }
     }
 
+    visible: store.shown
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
@@ -112,7 +144,7 @@ Item {
 
     Timer {
       interval: 33
-      running: win.width > 0 && win.height > 0
+      running: store.shown && win.width > 0 && win.height > 0
       repeat: true
       onTriggered: {
         if (!win.cat) win.cat = Brain.create(win.bounds.w / 2, win.bounds.floor)
@@ -135,7 +167,7 @@ Item {
 
       AnimatedSprite {
         anchors.fill: parent
-        source: Qt.resolvedUrl("sprites/cat.png")
+        source: root.spriteUrl
         frameWidth: 32
         frameHeight: 32
         frameX: 0
@@ -178,6 +210,28 @@ Item {
       }
     }
 
+    // Name tag, shown while she is being petted. Not in the input mask, so it never blocks clicks.
+    Rectangle {
+      visible: pet.mode === "petted" && store.name !== ""
+      x: Math.round(pet.x + (root.size - width) / 2)
+      y: pet.y - height - 4
+      width: nameText.implicitWidth + 14
+      height: nameText.implicitHeight + 6
+      radius: 4
+      color: "#e61e1e2e"
+      border.color: "#966a3a"
+      border.width: 1
+
+      Text {
+        id: nameText
+        anchors.centerIn: parent
+        text: store.name
+        color: "#fff6e8"
+        font.pixelSize: 13
+        font.bold: true
+      }
+    }
+
     Item {
       id: ball
 
@@ -191,7 +245,7 @@ Item {
 
       Image {
         anchors.fill: parent
-        source: Qt.resolvedUrl("sprites/cat.png")
+        source: root.spriteUrl
         sourceClipRect: Qt.rect(ball.frame * 32, Brain.YARN_ROW * 32, 12, 12)
         smooth: false
       }

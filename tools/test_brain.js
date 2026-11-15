@@ -105,4 +105,19 @@ assert(bats >= 3, "batted the ball only " + bats + " times")
 assert.strictEqual(k.ball, null, "ball should go away after a while")
 assert.notStrictEqual(k.mode, "run", "stops chasing once the ball is gone")
 
+// Energy: a lazy cat sleeps more than a playful one
+function sleepShare(energy) {
+  const eb = { w: 1824, floor: 984, size: 96, grip: 6, ledges: [], ballSize: 36, cursor: null, energy }
+  const e = B.create(500, eb.floor)
+  let asleep = 0
+  const ticks = 30 * 60 * 60
+  for (let i = 0; i < ticks; i++) {
+    B.tick(e, 1 / 30, eb, rand)
+    if (e.mode === "sleep") asleep++
+  }
+  return asleep / ticks
+}
+const lazy = sleepShare(0), playful = sleepShare(1)
+assert(lazy > playful * 2, `lazy cat should sleep much more: lazy ${lazy.toFixed(2)} playful ${playful.toFixed(2)}`)
+
 console.log("brain ok")

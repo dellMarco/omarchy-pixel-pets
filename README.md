@@ -15,6 +15,14 @@ Between all that she grooms, yawns, and stretches after naps.
 
 She hides under fullscreen apps.
 
+## Settings
+
+Click the cat icon in the bar to open her settings: name, coat (orange, grey, tuxedo, white, cream),
+size, energy (lazy to playful), whether she chases the mouse or hangs from windows, and a button to give her
+a yarn ball. Right-click the icon to hide or show her. Her name pops up when you pet her.
+
+Settings are saved in `~/.config/omarchy/pixel-pets.json`.
+
 ## Install
 
 ```sh
@@ -26,18 +34,19 @@ Remove with `omarchy plugin remove skrilexxx.pixel-pets`.
 ## Develop
 
 ```sh
-python3 tools/make_sprites.py   # redraw sprites/cat.png (edit PALETTE to recolor)
+python3 tools/make_sprites.py   # redraw sprites/cat-<coat>.png (coats are in COATS)
 node tools/test_brain.js        # behaviour self-check
 omarchy plugin validate .
 
 # install the working copy (plugin folders may not be symlinks)
 rsync -a --delete --exclude .git ./ ~/.config/omarchy/plugins/skrilexxx.pixel-pets/
 omarchy-shell shell rescanPlugins
-omarchy plugin enable skrilexxx.pixel-pets
+omarchy plugin enable skrilexxx.pixel-pets   # puts the icon in the right of the bar
 omarchy restart shell           # needed after changing .qml/.js; images hot-reload, code does not
 ```
 
-Layout: `Service.qml` is the window and input, `Brain.js` is the behaviour, `tools/make_sprites.py` draws the
+Layout: `Service.qml` is the pet window, input and saved settings, `Panel.qml` is the bar icon and settings
+panel, `Brain.js` is the behaviour, `tools/make_sprites.py` draws the
 sprite sheet (32x32 frames, one row per animation).
 
 ## License

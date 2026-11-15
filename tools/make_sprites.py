@@ -3,7 +3,8 @@
 
 Sheet: 32x32 frames, one row per animation, in the order of ROWS below.
 Brain.js ANIMS must match the row order and frame counts.
-Recolor by editing PALETTE and re-running.
+One sheet per coat (sprites/cat-<coat>.png): COATS overrides PALETTE colours.
+Add a coat here and to COATS in Panel.qml.
 """
 import os, struct, zlib
 
@@ -19,6 +20,15 @@ PALETTE = {
     "Z": (120, 150, 220),  # zzz
     "Y": (125, 175, 235),  # yarn
     "y": (80, 120, 200),   # yarn strands
+}
+
+COATS = {
+    "orange": {},
+    "grey":   {"O": (72, 74, 88), "F": (165, 170, 182), "S": (118, 122, 138), "B": (242, 242, 247)},
+    "black":  {"O": (16, 14, 22), "F": (62, 60, 72), "S": (42, 40, 52), "B": (240, 240, 246),
+               "E": (215, 225, 95)},
+    "white":  {"O": (150, 150, 168), "F": (252, 252, 254), "S": (222, 224, 234), "B": (255, 255, 255)},
+    "cream":  {"O": (172, 122, 80), "F": (250, 222, 172), "S": (236, 196, 140), "B": (255, 249, 238)},
 }
 
 
@@ -308,18 +318,21 @@ def write_png(path, w, h, rgba):
 def main():
     cols = max(len(frames) for _, frames in ROWS)
     w, h = cols * S, len(ROWS) * S
-    buf = bytearray(w * h * 4)
-    for r, (_, frames) in enumerate(ROWS):
-        for c, g in enumerate(frames):
-            for y in range(S):
-                for x in range(S):
-                    if g[y][x]:
-                        i = ((r * S + y) * w + c * S + x) * 4
-                        buf[i:i + 4] = bytes(PALETTE[g[y][x]]) + b"\xff"
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sprites", "cat.png")
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    write_png(out, w, h, bytes(buf))
-    print(f"wrote {os.path.normpath(out)} ({w}x{h})")
+    outdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sprites")
+    os.makedirs(outdir, exist_ok=True)
+    for coat, overrides in COATS.items():
+        pal = {**PALETTE, **overrides}
+        buf = bytearray(w * h * 4)
+        for r, (_, frames) in enumerate(ROWS):
+            for c, g in enumerate(frames):
+                for y in range(S):
+                    for x in range(S):
+                        if g[y][x]:
+                            i = ((r * S + y) * w + c * S + x) * 4
+                            buf[i:i + 4] = bytes(pal[g[y][x]]) + b"\xff"
+        out = os.path.normpath(os.path.join(outdir, f"cat-{coat}.png"))
+        write_png(out, w, h, bytes(buf))
+        print(f"wrote {out} ({w}x{h})")
 
 
 if __name__ == "__main__":
