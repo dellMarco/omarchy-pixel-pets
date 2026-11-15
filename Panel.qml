@@ -210,6 +210,16 @@ Panel {
           }
           Toggle {
             width: parent.width
+            label: "Follow time of day"
+            description: root.store && root.store.dayCycle && root.pet ? Brain.dayPhase(root.pet.hour)
+              : "Lively mornings, sleepy evenings and nights"
+            checked: root.store ? root.store.dayCycle : false
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            onClicked: root.set("dayCycle", !checked)
+          }
+          Toggle {
+            width: parent.width
             label: "Chase the mouse"
             checked: root.store ? root.store.chaseMouse : false
             foreground: root.bar.foreground

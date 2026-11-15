@@ -131,4 +131,20 @@ function sleepShare(energy) {
 const lazy = sleepShare(0), playful = sleepShare(1)
 assert(lazy > playful * 2, `lazy cat should sleep much more: lazy ${lazy.toFixed(2)} playful ${playful.toFixed(2)}`)
 
+// Time of day
+assert(B.timeEnergy(3) < 0.1 && B.timeEnergy(10) > 0.8 && B.timeEnergy(20) < 0.35, "day curve shape")
+assert(B.timeEnergy(6) < B.timeEnergy(9), "sleeps in, then wakes up")
+assert(Math.abs(B.timeEnergy(24) - B.timeEnergy(0)) < 1e-9 && Math.abs(B.timeEnergy(-1) - B.timeEnergy(23)) < 1e-9)
+for (let h = 0; h < 24; h += 0.25) {
+  for (const base of [0, 0.5, 1]) {
+    const e = B.effectiveEnergy(base, h)
+    assert(e >= 0 && e <= 1, "energy out of range at " + h)
+  }
+  assert(B.dayPhase(h).length > 0)
+}
+assert(B.effectiveEnergy(1, 2) > B.effectiveEnergy(0, 2), "a playful cat is livelier at night than a lazy one")
+const night = sleepShare(B.effectiveEnergy(0.5, 2)), morning = sleepShare(B.effectiveEnergy(0.5, 10))
+assert(night > 0.5, "should sleep most of the night, slept " + night.toFixed(2))
+assert(night > morning * 3, `sleeps far more at night: night ${night.toFixed(2)} morning ${morning.toFixed(2)}`)
+
 console.log("brain ok")

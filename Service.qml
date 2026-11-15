@@ -15,6 +15,20 @@ Item {
   readonly property int size: 32 * pixelScale
   readonly property int ballSize: 12 * pixelScale
 
+  // Local time as a fractional hour, refreshed every minute, for the day cycle.
+  property real hour: 0
+  function updateHour() {
+    var d = new Date()
+    hour = d.getHours() + d.getMinutes() / 60
+  }
+  Timer {
+    interval: 60000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.updateHour()
+  }
+
   function giveBall() {
     if (!win.cat || !store.shown) return
     Brain.spawnBall(win.cat, win.bounds)
@@ -37,6 +51,7 @@ Item {
       property bool shown: true
       property bool chaseMouse: true
       property bool hangOnWindows: true
+      property bool dayCycle: true
     }
   }
 
@@ -53,7 +68,7 @@ Item {
       ledges: store.hangOnWindows ? ledges : [],
       ballSize: root.ballSize,
       cursor: store.chaseMouse ? cursor : null,
-      energy: store.energy
+      energy: store.dayCycle ? Brain.effectiveEnergy(store.energy, root.hour) : store.energy
     })
 
     // Mouse position in this window's coordinates, or null when it is on another screen.

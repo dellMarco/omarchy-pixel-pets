@@ -19,7 +19,8 @@ She hides under fullscreen apps.
 ## Settings
 
 Click the cat icon in the bar to open her settings: name, coat (orange, grey, tuxedo, white, cream),
-size, energy (lazy to playful), whether she chases the mouse or climbs windows, and a button to give her
+size, energy (lazy to playful), whether she follows the time of day (lively mornings, sleepy evenings and
+nights), whether she chases the mouse or climbs windows, and a button to give her
 a yarn ball. Right-click the icon to hide or show her. Her name pops up when you pet her.
 
 Settings are saved in `~/.config/omarchy/pixel-pets.json`.

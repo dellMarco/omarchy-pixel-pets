@@ -135,13 +135,14 @@ function next(s, b, rand) {
   // energy 0 = lazy (naps a lot), 1 = playful (walks a lot, short naps)
   var e = b.energy === undefined ? 0.5 : b.energy
   var walk = 0.25 + 0.3 * e
-  var sleep = 0.03 + 0.2 * (1 - e)
+  var tired = (1 - e) * (1 - e)
+  var sleep = 0.03 + 0.35 * tired
   var r = rand()
   if (r < walk) walkTo(s, rand() * b.w)
   else if ((r -= walk) < 0.2) setMode(s, "sit", 3 + rand() * 5)
   else if ((r -= 0.2) < 0.12) setMode(s, "groom", 3 + rand() * 3)
   else if ((r -= 0.12) < 0.08) setMode(s, "yawn", 1.5)
-  else if ((r -= 0.08) < sleep) setMode(s, "sleep", (20 + rand() * 40) * (1.5 - e))
+  else if ((r -= 0.08) < sleep) setMode(s, "sleep", (20 + rand() * 40) * (0.5 + 2 * tired))
   else setMode(s, "idle", 1 + rand() * 3)
 }
 
@@ -328,4 +329,32 @@ function spawnBall(s, b) {
 function yarnFrame(o, ballSize) {
   var f = Math.floor(o.roll / (ballSize / 2)) % YARN_FRAMES
   return f < 0 ? f + YARN_FRAMES : f
+}
+
+// ---------- Time of day ----------
+// How lively a cat is at a given hour (0..24, fractional), 0 = asleep, 1 = bouncing off the walls.
+var DAY_CURVE = [[0, 0.05], [5, 0.05], [7, 0.25], [9, 0.9], [12, 0.75], [14, 0.55], [17, 0.6],
+                 [19, 0.4], [21, 0.2], [23, 0.07], [24, 0.05]]
+
+function timeEnergy(hour) {
+  var h = ((hour % 24) + 24) % 24
+  for (var i = 1; i < DAY_CURVE.length; i++) {
+    var a = DAY_CURVE[i - 1], z = DAY_CURVE[i]
+    if (h <= z[0]) return a[1] + (z[1] - a[1]) * (h - a[0]) / (z[0] - a[0])
+  }
+  return DAY_CURVE[0][1]
+}
+
+// The energy slider is her personality; the time of day moves her around it.
+function effectiveEnergy(base, hour) {
+  return Math.max(0, Math.min(1, timeEnergy(hour) + (base - 0.5) * 0.6))
+}
+
+function dayPhase(hour) {
+  var h = ((hour % 24) + 24) % 24
+  if (h >= 21 || h < 5) return "Night: mostly sleeping"
+  if (h < 8) return "Early morning: sleeping in"
+  if (h < 12) return "Morning: full of energy"
+  if (h < 17) return "Afternoon: taking it steady"
+  return "Evening: getting sleepy"
 }
