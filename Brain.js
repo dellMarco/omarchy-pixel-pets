@@ -28,10 +28,15 @@ var ANIMS = {
   bat:     { row: 11, frames: 2, fps: 6 },
   groom:   { row: 12, frames: 4, fps: 4 },
   stretch: { row: 13, frames: 3, fps: 2 },
-  yawn:    { row: 14, frames: 3, fps: 2 }
+  yawn:    { row: 14, frames: 3, fps: 2 },
+  ask:     { row: 16, frames: 2, fps: 2 },
+  drink:   { row: 17, frames: 4, fps: 4 },
+  eat:     { row: 18, frames: 4, fps: 4 }
 }
 var YARN_ROW = 15
 var YARN_FRAMES = 4
+var BUBBLE_ROW = 19   // speech bubble frames: water, food, break
+var BUBBLES = { water: 0, food: 1, break: 2 }
 
 var SPEED = 60          // px/s walking
 var RUN_SPEED = 150     // px/s chasing the ball
@@ -51,6 +56,8 @@ var BALL_LIFE = 40      // s before the yarn ball goes away
 var BALL_BOUNCE = 0.45
 var BALL_FRICTION = 1.5 // rolling slowdown per second on the floor
 
+var NAG_AFTER = 300     // s of asking before she comes over to the mouse
+
 // Modes in which something interesting (ball, mouse) can catch her attention.
 var REACTIVE = { idle: true, sit: true, walk: true, run: true, groom: true, yawn: true }
 // The trip up a window and back: climb the front (back to the viewer), go over the top edge,
@@ -63,13 +70,15 @@ function create(x, y) {
   return {
     mode: "idle", x: x, y: y, dir: 1, t: 0, until: 2, vy: 0, targetX: x, goal: null,
     ball: null, lastCursor: null, cursorStill: Infinity, pounces: 0, bored: 0, from: x, to: x,
-    clipTop: -Infinity, clipBottom: Infinity
+    clipTop: -Infinity, clipBottom: Infinity,
+    want: null, nag: false   // care reminder: "water" | "food" | "break"
   }
 }
 
 // How often Service.qml should tick, in ms. Full rate only while something moves;
 // the sprite animates on its own, so a still pet only needs to notice things.
-var STILL = { idle: true, sit: true, groom: true, yawn: true, stretch: true, petted: true, peek: true, held: true }
+var STILL = { idle: true, sit: true, groom: true, yawn: true, stretch: true, petted: true, peek: true, held: true,
+              ask: true, drink: true, eat: true }
 function tickInterval(mode, hasBall) {
   if (hasBall) return 33
   if (mode === "sleep") return 1000
@@ -79,7 +88,7 @@ function tickInterval(mode, hasBall) {
 
 // Whether Service.qml needs to keep the mouse position fresh.
 function watchesCursor(mode) {
-  return !!REACTIVE[mode] || mode === "crouch" || mode === "pounce"
+  return !!REACTIVE[mode] || mode === "crouch" || mode === "pounce" || mode === "ask"
 }
 
 function setMode(s, mode, duration) {
@@ -124,6 +133,12 @@ function pounceAt(s, b) {
 
 function next(s, b, rand) {
   var m = s.mode
+  if (m === "drink" || m === "eat") return setMode(s, "petted", 1.5)
+  if (s.want && s.goal === null) {
+    if (m !== "ask") return setMode(s, "ask", NAG_AFTER)
+    s.nag = true   // ignored for a while: go over to the mouse and ask there
+    return walkTo(s, b.cursor ? Math.max(0, Math.min(b.w, b.cursor.x - b.size / 2)) : rand() * b.w)
+  }
   if (m === "petted") return setMode(s, "sit", 3 + rand() * 5)
   if (m === "walk" && s.goal !== null) {
     var l = ledge(s, b)
@@ -158,7 +173,7 @@ function next(s, b, rand) {
 
 // Ball first, then the mouse. May switch her into run / bat / crouch.
 function distract(s, b, rand, dt) {
-  if (!REACTIVE[s.mode] || s.goal !== null) return
+  if (!REACTIVE[s.mode] || s.goal !== null || s.want) return
   var o = s.ball
   if (o) {
     var gap = o.x + b.ballSize / 2 - (s.x + b.size / 2)
@@ -312,8 +327,31 @@ function climbStep(s, b, l, dt, rand) {
   }
 }
 
-function pet(s) {
-  if (s.mode === "peekup" || s.mode === "peek") setMode(s, "peekdown", Infinity)   // ducks
+// Floor modes she can drop to come and ask for something.
+var CALM = { idle: true, sit: true, walk: true, run: true, groom: true, yawn: true, sleep: true, stretch: true, petted: true }
+
+// A care reminder (or null to cancel). She asks as soon as she's free.
+function want(s, kind) {
+  s.want = kind
+  s.nag = false
+  if (kind && CALM[s.mode]) {
+    s.goal = null
+    setMode(s, "ask", NAG_AFTER)
+  } else if (!kind && s.mode === "ask") setMode(s, "idle", 1)
+}
+
+function pet(s, b) {
+  if (s.want && !ON_LEDGE[s.mode] && s.mode !== "held" && s.mode !== "fall" && s.mode !== "pounce") {
+    var w = s.want
+    s.want = null
+    s.nag = false
+    if (w === "water") setMode(s, "drink", 4)
+    else if (w === "food") setMode(s, "eat", 5)
+    else {
+      setMode(s, "idle", 0.5)
+      spawnBall(s, b)
+    }
+  } else if (s.mode === "peekup" || s.mode === "peek") setMode(s, "peekdown", Infinity)   // ducks
   else if (!ON_LEDGE[s.mode] && s.mode !== "held" && s.mode !== "fall") setMode(s, "petted", 1.5)
 }
 

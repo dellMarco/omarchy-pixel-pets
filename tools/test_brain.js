@@ -136,6 +136,56 @@ while (simulated < 30 * 60) {
 for (const m of ["idle", "walk", "sit", "sleep", "climb", "peek", "descend"]) assert(seenA.has(m), "adaptive: never entered " + m)
 assert(ticks / simulated < 18, "should tick well under 30/s on average, did " + (ticks / simulated).toFixed(1) + "/s")
 
+// Care reminders: she sits and asks, ignores the mouse meanwhile, and a click serves it
+const tick30 = (c, bb, n) => { for (let i = 0; i < n; i++) { B.tick(c, 1 / 30, bb, rand); assert(B.ANIMS[c.mode], "no animation for " + c.mode) } }
+const rb = { ...cb, ledges: [], ballSize: 36, cursor: { x: 1500, y: cb.floor + 40 } }
+const r = B.create(300, rb.floor)
+B.want(r, "water")
+assert.strictEqual(r.mode, "ask")
+for (let i = 0; i < 30 * 200; i++) {   // a wiggling mouse right next to her doesn't distract her
+  rb.cursor = { x: r.x + 60 + (i % 2) * 20, y: rb.floor + 40 }
+  B.tick(r, 1 / 30, rb, rand)
+  assert.strictEqual(r.mode, "ask", "keeps asking, was " + r.mode)
+}
+B.pet(r, rb)
+assert.strictEqual(r.mode, "drink")
+assert.strictEqual(r.want, null)
+tick30(r, rb, 30 * 4.1)
+assert.strictEqual(r.mode, "petted", "happy after a drink")
+B.want(r, "food"); B.pet(r, rb)
+assert.strictEqual(r.mode, "eat")
+B.want(r, "break"); B.pet(r, rb)
+assert(r.ball && r.want === null, "a break brings out the ball")
+tick30(r, rb, 30 * 3)
+assert.strictEqual(r.mode, "run", "and she plays with it")
+B.want(r, null)
+
+// Ignored for NAG_AFTER: she walks over to the mouse, bubble bouncing, and asks there
+const n = B.create(100, rb.floor)
+rb.cursor = { x: 1200, y: rb.floor + 40 }
+B.want(n, "food")
+tick30(n, rb, 30 * (B.NAG_AFTER + 1))
+assert(n.nag && n.mode === "walk", "goes to nag, was " + n.mode)
+for (let i = 0; i < 30 * 30; i++) {   // the mouse wiggles; she's on a mission, not hunting
+  rb.cursor = { x: 1200 + (i % 2) * 10, y: rb.floor + 40 }
+  B.tick(n, 1 / 30, rb, rand)
+  assert(n.mode === "walk" || n.mode === "ask", "got distracted into " + n.mode)
+}
+assert.strictEqual(n.mode, "ask")
+assert(Math.abs(n.x + rb.size / 2 - 1200) < 5, "asks right by the mouse")
+B.want(n, null)
+assert(n.mode !== "ask" && !n.nag, "cancelled reminder stops the asking")
+
+// Asked while up on a window: finishes the trip, then asks on the floor
+const w2 = B.create(500, ab.floor)
+for (let i = 0; i < 30 * 60 * 30 && w2.mode !== "climb"; i++) B.tick(w2, 1 / 30, ab, rand)
+assert.strictEqual(w2.mode, "climb")
+B.want(w2, "water")
+assert.strictEqual(w2.mode, "climb", "doesn't let go of the window")
+for (let i = 0; i < 30 * 120 && w2.mode !== "ask"; i++) B.tick(w2, 1 / 30, ab, rand)
+assert.strictEqual(w2.mode, "ask")
+assert.strictEqual(w2.y, ab.floor)
+
 // Energy: a lazy cat sleeps more than a playful one
 function sleepShare(energy) {
   const eb = { w: 1824, floor: 984, size: 96, peek: 30, ledges: [], ballSize: 36, cursor: null, energy }

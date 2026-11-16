@@ -234,7 +234,20 @@ Panel {
             fontFamily: root.bar.fontFamily
             onClicked: root.set("hangOnWindows", !checked)
           }
+          Toggle {
+            width: parent.width
+            label: "Care reminders"
+            description: "She asks for water, food and breaks: click her to give it"
+            checked: root.store ? root.store.reminders : false
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            onClicked: root.set("reminders", !checked)
+          }
         }
+
+        Interval { title: "WATER"; key: "waterMinutes"; choices: [30, 45, 60] }
+        Interval { title: "FOOD"; key: "foodMinutes"; choices: [180, 240, 300] }
+        Interval { title: "BREAK"; key: "breakMinutes"; choices: [45, 60, 90] }
 
         Button {
           visible: !!root.store
@@ -248,6 +261,22 @@ Panel {
           onClicked: if (root.pet) root.pet.giveBall()
         }
       }
+    }
+  }
+
+  // How often a reminder comes, in minutes; shown while reminders are on.
+  component Interval: Section {
+    property string key: ""
+    property var choices: []
+    visible: !!root.store && root.store.reminders
+    ButtonGroup {
+      width: parent.width
+      options: parent.choices.map(m => ({ value: String(m), label: m % 60 ? m + " min" : m / 60 + " h" }))
+      value: root.store ? String(root.store[parent.key]) : ""
+      foreground: root.bar.foreground
+      fontFamily: root.bar.fontFamily
+      fontSize: Style.font.bodySmall
+      onChanged: function(v) { root.set(parent.key, Number(v)) }
     }
   }
 

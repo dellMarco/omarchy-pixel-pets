@@ -26,7 +26,32 @@ Item {
     running: true
     repeat: true
     triggeredOnStart: true
-    onTriggered: root.updateHour()
+    onTriggered: { root.updateHour(); root.remind() }
+  }
+
+  // Care reminders: when a need is overdue she sits and asks for it until you click her.
+  property var lastServed: ({ water: Date.now(), food: Date.now(), break: Date.now() })
+  function remind() {
+    var cat = win.cat
+    if (!store.reminders || !store.shown || idle.isIdle || !cat || cat.want) return
+    var mins = { water: store.waterMinutes, food: store.foodMinutes, break: store.breakMinutes }
+    var now = Date.now(), due = null, most = 0
+    for (var k in mins) {
+      var over = now - lastServed[k] - mins[k] * 60000
+      if (over >= 0 && over >= most) { due = k; most = over }
+    }
+    if (due) Brain.want(cat, due)
+  }
+  function forget() {
+    var now = Date.now()
+    lastServed = { water: now, food: now, break: now }
+    if (win.cat) Brain.want(win.cat, null)
+  }
+  // Away for 5+ minutes (idle, locked, asleep): start counting again from when you're back.
+  IdleMonitor {
+    id: idle
+    timeout: 300
+    onIsIdleChanged: if (!isIdle) root.forget()
   }
 
   function giveBall() {
@@ -52,6 +77,11 @@ Item {
       property bool chaseMouse: true
       property bool hangOnWindows: true
       property bool dayCycle: true
+      property bool reminders: true
+      property int waterMinutes: 45
+      property int foodMinutes: 240
+      property int breakMinutes: 60
+      onRemindersChanged: if (!reminders) root.forget()
     }
   }
 
@@ -158,6 +188,8 @@ Item {
       pet.y = Math.round(cat.y)
       pet.dir = cat.dir
       pet.mode = cat.mode
+      pet.want = cat.want || ""
+      pet.nag = cat.nag
       // On a window, the top edge hides whatever part of her is on the far side of it.
       var top = Math.max(0, Math.min(root.size, Math.round(cat.clipTop - cat.y)))
       var bottom = Math.max(top, Math.min(root.size, Math.round(cat.clipBottom - cat.y)))
@@ -188,6 +220,8 @@ Item {
       id: pet
 
       property string mode: "idle"
+      property string want: ""
+      property bool nag: false
       property int dir: 1
       property int shownTop: 0
       property int shownHeight: root.size
@@ -258,8 +292,10 @@ Item {
         }
         onReleased: {
           if (!win.cat) return
+          var w = win.cat.want
           if (win.cat.mode === "held") Brain.drop(win.cat)
-          else Brain.pet(win.cat)
+          else Brain.pet(win.cat, win.bounds)
+          if (w && !win.cat.want) root.lastServed[w] = Date.now()
           win.sync()
         }
         onDoubleClicked: {
@@ -289,6 +325,34 @@ Item {
         color: "#fff6e8"
         font.pixelSize: 13
         font.bold: true
+      }
+    }
+
+    // Speech bubble by her head while she asks for something; bounces once she has been ignored.
+    // Not in the input mask: clicking her is how you serve it.
+    Item {
+      id: bubble
+      property int bob: 0
+      visible: pet.want !== "" && (pet.mode === "ask" || pet.mode === "walk")
+      width: 16 * root.pixelScale
+      height: 14 * root.pixelScale
+      x: pet.dir > 0 ? pet.x + 21 * root.pixelScale : pet.x + root.size - 37 * root.pixelScale
+      y: pet.y - (9 + bob) * root.pixelScale
+      transform: Scale { origin.x: bubble.width / 2; xScale: pet.dir }
+
+      Image {
+        anchors.fill: parent
+        source: root.spriteUrl
+        sourceClipRect: Qt.rect((Brain.BUBBLES[pet.want] || 0) * 32, Brain.BUBBLE_ROW * 32, 16, 14)
+        smooth: false
+      }
+
+      Timer {
+        interval: 333
+        running: bubble.visible && pet.nag
+        repeat: true
+        onTriggered: bubble.bob = 1 - bubble.bob
+        onRunningChanged: if (!running) bubble.bob = 0
       }
     }
 

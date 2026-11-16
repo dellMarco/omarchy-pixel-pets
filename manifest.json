@@ -5,7 +5,7 @@
   "version": "0.5.0",
   "author": "skrilexxx",
   "license": "MIT",
-  "description": "A pixel-art cat that lives on your desktop: she walks, naps, plays with yarn, chases your mouse, and peeks over your windows",
+  "description": "A pixel-art cat that lives on your desktop: she walks, naps, plays with yarn, chases your mouse, peeks over your windows, and reminds you to drink, eat and take breaks",
   "kinds": [
     "service",
     "bar-widget"
