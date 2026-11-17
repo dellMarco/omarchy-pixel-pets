@@ -77,6 +77,9 @@ var ANIMS = {
   sniff:   { row: 20, frames: 4, fps: 6 },
   bark:    { row: 21, frames: 2, fps: 5 }
 }
+// Rows at the top of a sleep frame that hold nothing but the floating Zs: the body starts below
+// them on every sheet. Service.qml fades just those rows out while a dream bubble is up.
+var Z_ROWS = 11
 var YARN_ROW = 15
 var YARN_FRAMES = 4
 var BUBBLE_ROW = 19   // speech bubble frames: water, food, break

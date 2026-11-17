@@ -525,6 +525,9 @@ Item {
     readonly property string name: root.nameOf(species)
     // What she is dreaming of right now: "toy", "friend" or nothing.
     property string dream: ""
+    // The last dream, kept so the bubble still shows it while it fades out.
+    property string dreamShown: ""
+    onDreamChanged: if (dream !== "") dreamShown = dream
     // What the tour is showing on her right now.
     property string caption: ""
     // Scratch marks she left sliding down a window.
@@ -652,13 +655,42 @@ Item {
           clip: true
           transform: Scale { origin.x: view.size / 2; xScale: pet.dir }
 
-          Image {
-            x: -pet.frame * view.size
-            y: -pet.anim.row * view.size
-            width: implicitWidth * view.px
-            height: implicitHeight * view.px
-            source: view.spriteUrl
-            smooth: false
+          // Drawn in two bands so the upper one can fade on its own: asleep it holds only the
+          // Zs, which make way for the dream bubble and come back after it.
+          Item {
+            width: view.size
+            height: Brain.Z_ROWS * view.px
+            clip: true
+            opacity: pet.mode === "sleep" && view.dream !== "" ? 0 : 1
+
+            Behavior on opacity {
+              enabled: pet.mode === "sleep"   // any other pose has part of her up there: no fading her in
+              NumberAnimation { duration: 500 }
+            }
+
+            Image {
+              x: -pet.frame * view.size
+              y: -pet.anim.row * view.size
+              width: implicitWidth * view.px
+              height: implicitHeight * view.px
+              source: view.spriteUrl
+              smooth: false
+            }
+          }
+          Item {
+            y: Brain.Z_ROWS * view.px
+            width: view.size
+            height: view.size - y
+            clip: true
+
+            Image {
+              x: -pet.frame * view.size
+              y: -pet.anim.row * view.size - parent.y
+              width: implicitWidth * view.px
+              height: implicitHeight * view.px
+              source: view.spriteUrl
+              smooth: false
+            }
           }
         }
       }
@@ -730,8 +762,13 @@ Item {
     // Thought bubble over a dreaming pet's head. Not in the input mask either.
     Rectangle {
       id: dreamBubble
-      readonly property bool ofFriend: view.dream === "friend"
-      visible: view.dream !== ""
+      readonly property bool ofFriend: view.dreamShown === "friend"
+      opacity: view.dream !== "" ? 1 : 0
+      visible: opacity > 0
+
+      Behavior on opacity {
+        NumberAnimation { duration: 500 }
+      }
       x: Math.round(pet.x + (pet.dir > 0 ? 0.62 : 0.38) * view.size - width / 2)
       y: Math.round(pet.y + view.size * 0.3 - height)
       width: 12 * view.px + 10
