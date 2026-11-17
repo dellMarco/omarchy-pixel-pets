@@ -89,10 +89,31 @@ Item {
   // The screen is being shared or recorded. Hyprland reports a stop as soon as frames pause,
   // so only believe it after a quiet while.
   property bool casting: false
+  // Hyprland reports every capture the same way: a screenshot, a workspace switcher's thumbnail,
+  // a call sharing a window. What tells a share apart is that it goes on: captures have to keep
+  // coming for a few seconds before the pets believe it, and one that falls silent is forgotten.
+  Timer {
+    id: castSure
+    interval: 4000
+    onTriggered: root.casting = true
+  }
+  Timer {
+    id: castGap
+    interval: 1500
+    onTriggered: castSure.stop()
+  }
   Timer {
     id: castOver
     interval: 15000
     onTriggered: root.casting = false
+  }
+  function captureSeen(on) {
+    if (on) {
+      castGap.stop()
+      castOver.stop()
+      if (!casting && !castSure.running) castSure.start()
+    } else if (casting) castOver.restart()
+    else castGap.restart()
   }
 
   // Nobody at the desk for a few minutes: they nap until the mouse moves again.
@@ -308,11 +329,8 @@ Item {
           openedCheck.stop()
         } else if (name === "screencast") {
           // "state,owner": a monitor or a single window is being captured (1) or no longer is (0).
-          if (data.split(",")[0] !== "1") castOver.restart()
-          else if (!win.justSwitched()) {
-            castOver.stop()
-            root.casting = true
-          }
+          var on = data.split(",")[0] === "1"
+          if (!on || !win.justSwitched()) root.captureSeen(on)
         } else if (win.justSwitched()) {
           return
         } else if (name === "openwindow") {

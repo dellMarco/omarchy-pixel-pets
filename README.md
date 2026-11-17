@@ -71,7 +71,8 @@ How often the self-started ones happen follows the energy slider and the time of
 - **Music:** while something plays, sitting tails flick faster and the dog spins more.
 - **Startled:** a window opening or closing right over a pet makes the cat hop and scurry off and
   the dog bark, at most once every few minutes.
-- **Camera shy:** while the screen is shared or recorded they run off and stay away. Switch in the settings.
+- **Camera shy:** a few seconds into a screen or window share they run off and stay away until it ends;
+  screenshots and thumbnails don't count. Switch in the settings.
 - **Low battery:** below 20% they get sleepy, below 10% they sleep; plugging in wakes them.
 
 Settings are saved in `~/.config/omarchy/pixel-pets.json`.

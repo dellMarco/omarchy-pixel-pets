@@ -48,7 +48,7 @@ Panel {
     size: ["Size", "Sets both. The dog is always one step bigger than the cat."],
     energy: ["Energy", "More walking and play, less sleep, and more things done on their own: visits, the dog chasing the cat (not when lazy), zoomies (only near playful). Toys they bring unasked (dog four times a day, cat once) and trips off screen don't depend on it."],
     dayCycle: ["Follow time of day", "Off: energy stays where the slider is, all day. On: lively mornings, sleepy evenings and nights around it. The phase right now shows next to ENERGY."],
-    cameraShy: ["Camera shy", "They run off screen while the screen or a window is shared or recorded, and come back about 15 seconds after it stops."],
+    cameraShy: ["Camera shy", "They run off screen once the screen or a window has been shared for a few seconds, and come back about 15 seconds after it stops. A screenshot or a quick thumbnail doesn't count."],
     chaseMouse: ["Stalk the pointer", "They crouch and pounce at the pointer when it moves near the bottom edge. Off: they ignore it, and a toy they bring is dropped anywhere, not below the pointer."],
     hangOnWindows: ["Cat climbs windows", "She climbs windows, on her own and to escape the dog: onto the top to walk, sit and nap if there is room above, else up behind it to peek over. Off: she stays on the floor and escapes off screen."],
     reminders: ["Care reminders", "On a timer a pet sits with a speech bubble asking for water, food or a break; with both out they take turns. Click it to serve: it drinks, eats, or gets its toy. Ignored for five minutes, it comes over to the pointer."],
