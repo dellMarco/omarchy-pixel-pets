@@ -302,8 +302,9 @@ Item {
           // Two pets start apart, either side of the middle.
           if (!live[i].brain) live[i].brain = Brain.create(b.w * (live.length > 1 ? 0.35 + 0.3 * i : 0.5), b.floor)
         }
-        // Windows can vanish under a climber at any moment, so recheck every tick while one is on its way.
-        if (live.some(v => v.brain.goal !== null)) win.refreshLedges()
+        // Windows can vanish under a climber at any moment, so recheck every tick while one is on
+        // its way up or sitting on top.
+        if (live.some(v => v.brain.goal !== null || v.brain.perch !== null)) win.refreshLedges()
         for (var j = 0; j < live.length; j++) {
           Brain.tick(live[j].brain, interval / 1000, win.boundsFor(live[j]), Math.random)
           live[j].sync()

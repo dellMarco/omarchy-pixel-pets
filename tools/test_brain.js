@@ -492,4 +492,78 @@ for (const species of ["cat", "dog"]) {
   assert.strictEqual(count.dog, 4, "the dog brings his ball four times")
   assert.strictEqual(count.cat, 1, "the cat her yarn once")
 }
+// ---------- On top of a window: her floor for a while ----------
+{
+  const size = 96, floor = 989, ground = 1079
+  const shelf = { id: "0xshelf", x: 300, y: 500, w: 800 }
+  const world = { ledges: [shelf] }
+  const pb = () => ({ w: 1920 - size, floor, ground, size, ballSize: 36, peek: 30, ledges: world.ledges, species: "cat", energy: 0.5 })
+  const up = () => {
+    const c = B.create(600, floor); c.stay = 1e9
+    for (let i = 0; i < 30 * 3600 * 3 && c.perch === null; i++) { B.tick(c, 1 / 30, pb(), rand); c.stay = 1e9 }
+    assert(c.perch === shelf.id, "she gets onto a window that has room above it")
+    return c
+  }
+  const feet = shelf.y - (ground - floor)   // her frame's top when her feet are on the edge
+  const c = up()
+  assert.strictEqual(c.y, feet, "feet on the top edge")
+  const seen = new Set()
+  let ticks = 0
+  while (c.perch !== null && ticks < 30 * 600) {
+    B.tick(c, 1 / 30, pb(), rand); ticks++
+    if (c.perch === null) break
+    seen.add(c.mode)
+    assert.strictEqual(c.y, feet, c.mode + " left the edge")
+    assert(c.x >= shelf.x && c.x + size <= shelf.x + shelf.w, "walked off the end at " + c.x)
+    assert(c.clipTop === -Infinity && c.clipBottom === Infinity, "in full view up there")
+  }
+  assert(ticks / 30 >= 35 && ticks / 30 < 400, "stays a while, then has had enough: " + (ticks / 30).toFixed(0) + "s")
+  assert(seen.has("walk") && seen.size >= 3, "walks and rests up there: " + [...seen])
+  assert.strictEqual(c.mode, "descend", "and climbs back down")
+  for (let i = 0; i < 30 * 30 && c.mode === "descend"; i++) {
+    B.tick(c, 1 / 30, pb(), rand)
+    assert(c.clipTop === -Infinity, "in full view on the way down")
+  }
+  assert(c.y === floor && c.mode === "idle", "back on the floor")
+
+  // The window goes, moves, or the workspace changes: she drops to the floor.
+  for (const change of [() => { world.ledges = [] }, () => { world.ledges = [Object.assign({}, shelf, { y: 300 })] },
+                        () => { world.ledges = [Object.assign({}, shelf, { x: 1200 })] }]) {
+    world.ledges = [shelf]
+    const d = up()
+    change()
+    B.tick(d, 1 / 30, pb(), rand)
+    assert.strictEqual(d.mode, "fall", "drops when the window is no longer under her")
+    for (let i = 0; i < 90 && d.mode === "fall"; i++) B.tick(d, 1 / 30, pb(), rand)
+    assert(d.y === floor && d.perch === null, "and lands on the floor")
+  }
+  world.ledges = [shelf]
+
+  // A toy, being picked up, or a shared screen bring her down too.
+  const t = up(); B.spawnBall(t, pb()); B.tick(t, 1 / 30, pb(), rand)
+  assert.strictEqual(t.mode, "fall", "jumps down for her yarn")
+  const g = up(); B.grab(g); B.drop(g)
+  for (let i = 0; i < 90 && g.mode === "fall"; i++) B.tick(g, 1 / 30, pb(), rand)
+  assert(g.y === floor && g.perch === null, "dropped from the hand she lands on the floor, not back on the window")
+  const h = up(); B.tick(h, 1 / 30, Object.assign(pb(), { hide: true }), rand)
+  assert.strictEqual(h.mode, "fall", "comes down to hide")
+
+  // A window right under the top of the screen has no room on it: she only ever peeks over that one.
+  world.ledges = [{ id: "0xtop", x: 300, y: 38, w: 800 }]
+  const p = B.create(600, floor)
+  const modes = new Set()
+  for (let i = 0; i < 30 * 3600 * 2; i++) { B.tick(p, 1 / 30, pb(), rand); p.stay = 1e9; modes.add(p.mode); assert(p.perch === null, "no room up there") }
+  assert(modes.has("peek"), "still peeks over it")
+
+  // The dog leaves a cat on a window alone.
+  world.ledges = [shelf]
+  const cat = up(), dog = B.create(700, 959)
+  const db = { w: 1920 - 128, floor: 959, ground, size: 128, ballSize: 48, ledges: [shelf], species: "dog", friend: cat, friendSize: size, energy: 0.9 }
+  for (let i = 0; i < 30 * 30; i++) {
+    cat.perchFor = 1e9
+    B.tick(cat, 1 / 30, Object.assign(pb(), { friend: dog, friendSize: 128 }), rand); B.tick(dog, 1 / 30, db, rand); dog.stay = 1e9
+    assert(!dog.visiting && dog.mode !== "chase", "no visits or chases while she is up")
+    assert(cat.perch !== null && cat.mode !== "flee", "she stays put")
+  }
+}
 console.log("brain ok")

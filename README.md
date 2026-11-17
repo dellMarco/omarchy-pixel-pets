@@ -10,9 +10,10 @@ screen, sits, naps, and stays out of your way: clicks next to her go straight th
 - The **yarn ball** button in the settings gives her a ball of yarn. She chases and bats it around; you can drag and throw it too.
 - Wiggle the **mouse** near the bottom of the screen and she may stalk and pounce on it.
 
-Now and then she climbs up one of your windows (back to you, tail swinging), slips over its top edge and peeks
-back over it, then climbs back down.
-Click her while she peeks and she ducks; if the window closes or moves, she drops.
+Now and then she climbs up one of your windows (back to you, tail swinging). If there is room above it she
+gets onto the top and treats it as her floor for a while: walks along it, sits, grooms, naps, then climbs
+back down. Otherwise she slips over its top edge and peeks back over it, then climbs back down.
+Click her while she peeks and she ducks; if the window closes or moves, or you switch workspace, she drops.
 
 Between all that she grooms, yawns, and stretches after naps.
 

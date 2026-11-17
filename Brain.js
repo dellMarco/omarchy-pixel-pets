@@ -86,6 +86,11 @@ var SPIN_FLIP = 0.16    // s between turns while chasing his tail
 var MOUTH = { x: 17, y: 11 }
 var GRAVITY = 1800      // px/s^2
 var HANG_CHANCE = 0.15  // share of idle decisions that go for a window
+// A window with room above its top edge is somewhere to be: she climbs onto it and walks, sits
+// and naps up there as she does on the floor, until she has had enough or the window goes.
+var PERCH_SHARE = 0.7   // of the trips up such a window end on top of it; the rest peek over it
+var PERCH_MIN = 40      // s up there, at least
+var PERCH_SPAN = 140    // s more, at random
 var CLIMB_SPEED = 90    // px/s climbing up / down the front of a window
 var PEEK_SPEED = 25     // px/s rising over / sinking below the window edge
 
@@ -135,6 +140,7 @@ function create(x, y) {
     ball: null, lastCursor: null, cursorStill: Infinity, pounces: 0, bored: 0, from: x, to: x,
     visiting: false, then: null,
     stay: null, onFor: 0,   // s left before wandering off; s on screen since she came back
+    perch: null, perchY: 0, perchFor: 0, onTop: false,   // the window she is on, by id; onTop: this climb goes over the top, in full view
     pending: false, laps: 0, asking: false, askDay: null, askAt: [], askDone: [],
     pets: 0, petT: Infinity, patience: null, grumpy: 0, calm: 0,
     dream: null, dreamAt: null, settled: false,
@@ -184,6 +190,41 @@ function ledge(s, b) {
   return null
 }
 
+// Where her frame's top sits when her feet are on a window's top edge: as far above the edge
+// as her resting place is above the ground line.
+function perchTop(l, b) {
+  return l.y - (ground(b) - b.floor)
+}
+
+// The window she is on top of, if it is still there, still under her and has not moved.
+function perched(s, b) {
+  var ls = b.ledges || []
+  for (var i = 0; i < ls.length; i++)
+    if (ls[i].id === s.perch && ls[i].y === s.perchY && ls[i].x <= s.x && s.x + b.size <= ls[i].x + ls[i].w) return ls[i]
+  return null
+}
+
+// What she does next up there: the quiet half of what she does on the floor, within the
+// window's width. When her time is up, or she is due off screen, she climbs back down.
+function perchNext(s, b, l, rand) {
+  if (s.perchFor <= 0 || s.stay <= 0) {
+    setMode(s, "descend", Infinity)
+    s.goal = l.id
+    s.onTop = true
+    s.perch = null
+    return
+  }
+  var e = b.energy === undefined ? 0.5 : b.energy
+  var tired = (1 - e) * (1 - e)
+  var r = rand()
+  if (r < 0.3) walkTo(s, l.x + rand() * (l.w - b.size))
+  else if ((r -= 0.3) < 0.25) setMode(s, "sit", 3 + rand() * 5)
+  else if ((r -= 0.25) < 0.12) setMode(s, "groom", 3 + rand() * 3)
+  else if ((r -= 0.12) < 0.05) setMode(s, "yawn", 1.5)
+  else if ((r -= 0.05) < 0.03 + 0.35 * tired) setMode(s, "sleep", (25 + rand() * 50) * (0.5 + 2 * tired))
+  else setMode(s, "idle", 1 + rand() * 3)
+}
+
 function ground(b) {
   return b.ground === undefined ? b.floor + b.size : b.ground
 }
@@ -191,7 +232,7 @@ function ground(b) {
 // The other pet, if it is somewhere a visit makes sense.
 function friend(b) {
   var f = b.friend
-  return f && APPROACHABLE[f.mode] && f.goal === null ? f : null
+  return f && APPROACHABLE[f.mode] && f.goal === null && f.perch === null ? f : null
 }
 
 function visit(s, f, b) {
@@ -382,7 +423,10 @@ function next(s, b, rand) {
   if ((m === "walk" || m === "flee") && s.goal !== null) {
     var l = ledge(s, b)
     setMode(s, "climb", Infinity)
-    if (l) s.clipTop = l.y
+    // With room for her above the edge she mostly goes over the top, in full view, to stay a while;
+    // otherwise up behind the window to peek over it.
+    s.onTop = !!l && perchTop(l, b) >= 0 && rand() < PERCH_SHARE
+    if (l && !s.onTop) s.clipTop = l.y
     return
   }
   if (m === "flee") return setMode(s, "away", 6 + rand() * 8)   // strolls back in as if nothing happened
@@ -395,6 +439,10 @@ function next(s, b, rand) {
   if (m === "crouch") return cursorNear(s, b) ? pounceAt(s, b) : setMode(s, "idle", 1)
   if (m === "bat") return setMode(s, "idle", 0.3)
   if (m !== "idle" && m !== "sit") return setMode(s, "idle", 1 + rand() * 3)
+  if (s.perch !== null) {
+    var top = perched(s, b)
+    return top ? perchNext(s, b, top, rand) : drop(s)
+  }
   var due = s.ball ? -1 : askDue(s, b)
   if (due >= 0) {
     s.askDone[due] = true
@@ -454,7 +502,7 @@ function next(s, b, rand) {
 
 // Ball first, then the mouse. May switch her into run / bat / crouch.
 function distract(s, b, rand, dt) {
-  if (!REACTIVE[s.mode] || s.goal !== null) return
+  if (!REACTIVE[s.mode] || s.goal !== null || s.perch !== null) return
   var o = s.ball
   // A ball he already brought back lies there until it is thrown again.
   if (o && !o.fetched) {
@@ -588,11 +636,23 @@ function tick(s, dt, b, rand) {
       next(s, b, rand)
     }
   } else {
-    s.y = b.floor
+    var top = null
+    if (s.perch !== null) {
+      top = perched(s, b)
+      // The window closed, moved or is on another workspace now; a toy is out; or the screen is
+      // being shared: down she comes, and the floor rules take over from there.
+      if (!top || b.hide || (s.ball && !s.ball.fetched)) {
+        drop(s)
+        return s
+      }
+      s.perchFor -= dt
+      s.targetX = Math.max(top.x, Math.min(top.x + top.w - b.size, s.targetX))
+    }
+    s.y = top ? perchTop(top, b) : b.floor
     s.t += dt
     if (b.hide && !OFFSCREEN[s.mode]) leave(s, b, rand)   // screen is being shared: out of sight
     // Time to bring the toy: that gets her up from a nap, or back from a wander.
-    if (!b.hide && !b.exhausted && !s.settled && !s.ball && askDue(s, b) >= 0) {
+    if (!b.hide && !b.exhausted && !s.settled && !s.ball && !top && askDue(s, b) >= 0) {
       if (s.mode === "away") callBack(s, b, rand)
       else if (s.mode === "sleep") setMode(s, "stretch", 1.5)
     }
@@ -635,13 +695,23 @@ function tick(s, dt, b, rand) {
     if (s.t >= s.until) next(s, b, rand)
   }
   if (!OFFSCREEN[s.mode]) s.x = Math.max(0, Math.min(b.w, s.x))
+  if (top) s.x = Math.max(top.x, Math.min(top.x + top.w - b.size, s.x))
   return s
 }
 
 function climbStep(s, b, l, dt, rand) {
   s.t += dt
   var top = l.y - b.peek
-  if (s.mode === "climb") {
+  if (s.mode === "climb" && s.onTop) {
+    s.y -= CLIMB_SPEED * dt
+    if (s.y <= perchTop(l, b)) {   // feet on the edge: she is up
+      s.y = perchTop(l, b)
+      setMode(s, "idle", 1 + rand() * 2)
+      s.perch = l.id
+      s.perchY = l.y
+      s.perchFor = PERCH_MIN + rand() * PERCH_SPAN
+    }
+  } else if (s.mode === "climb") {
     s.y -= CLIMB_SPEED * dt
     if (s.y + b.size <= l.y) {   // all the way over the edge
       s.y = l.y
@@ -673,7 +743,7 @@ function climbStep(s, b, l, dt, rand) {
     s.clipTop = -Infinity
     s.clipBottom = l.y
   } else if (ON_LEDGE[s.mode]) {
-    s.clipTop = l.y
+    s.clipTop = s.onTop ? -Infinity : l.y
     s.clipBottom = Infinity
   }
 }
@@ -732,7 +802,7 @@ function pet(s, rand) {
 // A window opened or closed right where she is. The cat hops and scurries a few steps off;
 // the dog barks at it. More likely the livelier she is, and not again for a few minutes.
 function startle(s, b, rand) {
-  if (!REACTIVE[s.mode] || s.goal !== null || s.calm > 0 || rand() > 0.2 + 0.6 * s.energy) return
+  if (!REACTIVE[s.mode] || s.goal !== null || s.perch !== null || s.calm > 0 || rand() > 0.2 + 0.6 * s.energy) return
   s.calm = CALM + rand() * CALM
   // Mostly the dog barks and the cat hops and scurries off; now and then he jumps and she just hops.
   var hops = traits(b).fetches ? rand() < 0.3 : true
@@ -785,10 +855,12 @@ function wake(s, b) {
 }
 
 function grab(s) {
+  s.perch = null
   setMode(s, "held", Infinity)
 }
 
 function drop(s) {
+  s.perch = null
   s.vy = 0
   setMode(s, "fall", Infinity)
 }

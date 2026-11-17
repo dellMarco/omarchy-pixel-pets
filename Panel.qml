@@ -50,7 +50,7 @@ Panel {
     dayCycle: ["Follow time of day", "Off: energy stays where the slider is, all day. On: lively mornings, sleepy evenings and nights around it. The phase right now shows next to ENERGY."],
     cameraShy: ["Camera shy", "They run off screen while the screen or a window is shared or recorded, and come back about 15 seconds after it stops."],
     chaseMouse: ["Stalk the pointer", "They crouch and pounce at the pointer when it moves near the bottom edge. Off: they ignore it, and a toy they bring is dropped anywhere, not below the pointer."],
-    hangOnWindows: ["Cat climbs windows", "She climbs a window and peeks over its top edge, on her own and to escape when the dog chases her. Off: she stays on the floor and escapes by running off screen."],
+    hangOnWindows: ["Cat climbs windows", "She climbs windows, on her own and to escape the dog: onto the top to walk, sit and nap if there is room above, else up behind it to peek over. Off: she stays on the floor and escapes off screen."],
     catToy: ["Give yarn ball", "She chases and bats it around; you can drag and throw it too. Giving it calls her back if she is off screen."],
     dogToy: ["Throw tennis ball", "He fetches it back to where it was thrown from and barks for another throw. Throwing it calls him back if he is off screen."]
   })
