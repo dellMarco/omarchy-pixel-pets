@@ -933,4 +933,26 @@ for (const species of ["cat", "dog"]) {
   for (let i = 0; i < 30 * 30; i++) B.tick(going, 1 / 30, pb({ wander: false, hide: true }), rand)
   assert.strictEqual(going.mode, "away", "camera shy is not wandering")
 }
+// ---------- Whoever came last stands in front ----------
+{
+  const floors = { cat: 989, dog: 959 }, sizes = { cat: 96, dog: 128 }
+  const cat = B.create(600, floors.cat), dog = B.create(1200, floors.dog)
+  const pb = k => ({ w: 1920 - sizes[k], floor: floors[k], ground: 1079, size: sizes[k], ballSize: 36, ledges: [], species: k,
+                     friend: k === "cat" ? dog : cat, friendSize: sizes[k === "cat" ? "dog" : "cat"], energy: 0.5 })
+  assert.strictEqual(cat.arrived, dog.arrived, "nobody has come anywhere yet")
+  B.visit(cat, dog, pb("cat"))
+  assert(cat.arrived > dog.arrived, "the cat walks over: she is in front")
+  B.visit(dog, cat, pb("dog"))
+  assert(dog.arrived > cat.arrived, "the dog walks over: now he is")
+  cat.mode = "away"; cat.x = -96; B.comeBack(cat, pb("cat"), 0, 0.5)
+  assert(cat.arrived > dog.arrived, "back on screen counts as arriving")
+  // Over a day both get their turns in front.
+  let catFront = 0, dogFront = 0
+  for (let i = 0; i < 30 * 3600 * 12; i++) {
+    B.tick(cat, 1 / 30, pb("cat"), rand); B.tick(dog, 1 / 30, pb("dog"), rand)
+    if (cat.arrived > dog.arrived) catFront++; else dogFront++
+  }
+  assert(catFront > 0 && dogFront > 0 && Math.min(catFront, dogFront) / (catFront + dogFront) > 0.15,
+         "both spend a fair share in front: cat " + catFront + ", dog " + dogFront)
+}
 console.log("brain ok")

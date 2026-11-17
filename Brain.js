@@ -176,6 +176,7 @@ function create(x, y) {
     stay: null, onFor: 0,   // s left before wandering off; s on screen since she came back
     perch: null, perchY: 0, perchFor: 0, onTop: false, low: false,
     mark: null,   // scratches she left on a window: { id, x, top, bottom, pts, left, ... }
+    arrived: 0,   // when she last came over or came back, for who stands in front
     staged: null, // set by the tour: which way the choices that are usually left to chance go   // the window she is on, by id; onTop: this climb goes over the top, in full view
     pending: false, laps: 0, offerDay: null, offerAt: [], offerDone: [],
     pets: 0, petT: Infinity, patience: null, grumpy: 0, calm: 0,
@@ -321,7 +322,16 @@ function friend(b) {
   return f && APPROACHABLE[f.mode] && f.goal === null && f.perch === null ? f : null
 }
 
+// Whoever came last stands in front: Service.qml stacks the pets by this. Counted up on every
+// arrival: setting off to the other one, or walking back onto the screen. Both happen while the
+// two are apart, so the change of order is never seen as a jump.
+var arrivals = 0
+function arrive(s) {
+  s.arrived = ++arrivals
+}
+
 function visit(s, f, b) {
+  arrive(s)
   if (f.mode === "sleep") {
     // Cuddle up: come in on the side her head is on, so the two lie face to face with the heads
     // just overlapping. In the sleep frame the head spans columns 15..29 (3..17 when flipped).
@@ -490,6 +500,7 @@ function leave(s, b, rand) {
 
 // Walks back in, usually on the side she left by, to somewhere in the nearer third of the screen.
 function comeBack(s, b, r1, r2) {
+  arrive(s)
   var left = (s.x < b.w / 2) === (r1 < 0.7)
   s.x = left ? -b.size : b.w + b.size
   walkTo(s, left ? b.w * (0.05 + 0.3 * r2) : b.w * (0.95 - 0.3 * r2), "enter")

@@ -549,6 +549,7 @@ Item {
       pet.y = Math.round(brain.y)
       pet.dir = brain.dir
       pet.mode = brain.mode
+      z = brain.arrived   // the one who came last is in front
       pet.want = brain.want || ""
       pet.nag = brain.nag
       // On a window, the top edge hides whatever part of her is on the far side of it.
@@ -769,8 +770,12 @@ Item {
       Behavior on opacity {
         NumberAnimation { duration: 500 }
       }
-      x: Math.round(pet.x + (pet.dir > 0 ? 0.62 : 0.38) * view.size - width / 2)
-      y: Math.round(pet.y + view.size * 0.3 - height)
+      // Rising from her head: asleep it rests at the front of the frame (column 22 of 32, its top
+      // around row 13), so the bubble sits up and a little forward of it, two small puffs between.
+      readonly property real headX: pet.x + (pet.dir > 0 ? 22 : 10) / 32 * view.size
+      readonly property real headTop: pet.y + 13 / 32 * view.size
+      x: Math.round(Math.max(2, Math.min(win.fullWidth - width - 2, headX + pet.dir * view.size * 0.16 - width / 2)))
+      y: Math.round(headTop - 16 - height)
       width: 12 * view.px + 10
       height: width
       radius: width / 2
@@ -787,15 +792,21 @@ Item {
         sourceClipRect: dreamBubble.ofFriend ? Qt.rect(0, Brain.ANIMS.sit.row * 32, 32, 32) : Qt.rect(0, Brain.YARN_ROW * 32, 12, 12)
         smooth: false
       }
-      Rectangle {
-        x: parent.width * (pet.dir > 0 ? 0.1 : 0.7)
-        y: parent.height + 2
-        width: 6
-        height: 6
-        radius: 3
-        color: parent.color
-        border.color: parent.border.color
-        border.width: 1
+      // The puffs: a small one just over her head, a bigger one halfway up to the bubble.
+      Repeater {
+        model: [{ d: 4, up: 4, along: 0.08 }, { d: 7, up: 11, along: 0.5 }]
+
+        Rectangle {
+          required property var modelData
+          x: Math.round(dreamBubble.headX - dreamBubble.x + pet.dir * view.size * 0.16 * modelData.along - width / 2)
+          y: Math.round(dreamBubble.headTop - dreamBubble.y - modelData.up - height / 2)
+          width: modelData.d
+          height: width
+          radius: width / 2
+          color: dreamBubble.color
+          border.color: dreamBubble.border.color
+          border.width: 1
+        }
       }
     }
 
