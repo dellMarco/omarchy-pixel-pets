@@ -85,9 +85,12 @@ Item {
     onTriggered: win.each((brain, b) => Brain.welcome(brain, b, Math.random, win.cursor ? win.cursor.x : null))
   }
 
+  function hurry() { win.hurry() }
+
   function giveBall(species) {
     var view = species === "dog" ? dogView : catView
     if (!view.brain || !store.shown) return
+    hurry()
     Brain.spawnBall(view.brain, win.boundsFor(view))
     view.sync()
   }
@@ -121,14 +124,27 @@ Item {
 
     readonly property var views: [catView, dogView]
 
+    // The screen's size, kept from when the window was last up: while every pet is off screen the
+    // window is taken down, and their lives go on by these numbers.
+    property real fullWidth: 0
+    property real fullHeight: 0
+    onWidthChanged: if (width > 0) fullWidth = width
+    onHeightChanged: if (height > 0) fullHeight = height
+
+    // How closely the pets need watching right now (Brain.tempo): 2 something moves, 1 all hold
+    // still, 0 all off screen. It sets how often they are ticked and whether the window is up.
+    // Anything done to a pet from outside the tick calls hurry(), so the answer shows at once.
+    property int tempo: 2
+    function hurry() { tempo = 2 }
+
     // What a pet's brain gets to know about the world, built fresh for each tick.
     function boundsFor(view) {
       var other = view === catView ? dogView : catView
       return {
-        w: width - view.size,
+        w: fullWidth - view.size,
         // The sheets leave two empty rows under the feet; stand 1px above the screen edge.
-        floor: height - 1 - view.size + 2 * view.px,
-        ground: height - 1,
+        floor: fullHeight - 1 - view.size + 2 * view.px,
+        ground: fullHeight - 1,
         size: view.size,
         species: view.species,
         friend: other.brain,
@@ -148,6 +164,7 @@ Item {
 
     // Calls fn(brain, bounds) for every pet that is out.
     function each(fn) {
+      hurry()
       for (var i = 0; i < views.length; i++)
         if (views[i].active && views[i].brain) fn(views[i].brain, boundsFor(views[i]))
     }
@@ -158,7 +175,10 @@ Item {
         var v = views[i]
         if (!v.active || !v.brain) continue
         var mid = v.brain.x + v.size / 2
-        if (mid >= x && mid <= x + w) Brain.startle(v.brain, boundsFor(v), Math.random)
+        if (mid >= x && mid <= x + w) {
+          hurry()
+          Brain.startle(v.brain, boundsFor(v), Math.random)
+        }
       }
     }
     function ledgeOf(address) {
@@ -194,7 +214,7 @@ Item {
           var mon = Hyprland.monitorFor(win.screen)
           if (!m || !mon) return
           var x = Number(m[1]) - mon.x, y = Number(m[2]) - mon.y
-          win.cursor = x >= 0 && y >= 0 && x < win.width && y < win.height ? { x: x, y: y } : null
+          win.cursor = x >= 0 && y >= 0 && x < win.fullWidth && y < win.fullHeight ? { x: x, y: y } : null
         }
       }
       onConnectedChanged: if (connected) { write("cursorpos"); flush() }
@@ -222,7 +242,7 @@ Item {
           if (o.size[1] < catView.size * 1.5) continue
           // Only the part of the top edge that is on this screen counts: she can't walk past the
           // screen edge to reach the rest. Only the cat climbs, so it has to be wide enough for her.
-          var left = Math.max(0, o.at[0] - mon.x), right = Math.min(win.width, o.at[0] - mon.x + o.size[0])
+          var left = Math.max(0, o.at[0] - mon.x), right = Math.min(win.fullWidth, o.at[0] - mon.x + o.size[0])
           if (right - left < catView.size) continue
           out.push({ id: o.address, x: left, y: o.at[1] - mon.y, w: right - left })
         }
@@ -234,7 +254,9 @@ Item {
     Connections {
       target: Hyprland
       function onRawEvent(event) {
-        Hyprland.refreshToplevels()
+        // Events come in bursts (a title changes on every keystroke in some apps); one fresh
+        // window list after the burst is enough, and none is needed while nobody is on screen.
+        if (store.shown && win.tempo > 0) toplevelsSoon.restart()
         var data = String(event.data || "")
         var name = String(event.name)
         if (name === "workspace" || name === "workspacev2" || name === "focusedmon" || name === "focusedmonv2"
@@ -263,14 +285,20 @@ Item {
       }
     }
     Timer {
+      id: toplevelsSoon
+      interval: 150
+      onTriggered: Hyprland.refreshToplevels()
+    }
+    Timer {
       interval: 1000
-      running: true
+      running: store.shown && win.tempo > 0
       repeat: true
       triggeredOnStart: true
       onTriggered: { Hyprland.refreshToplevels(); win.refreshLedges() }
     }
 
-    visible: store.shown
+    // Down while every pet is off screen: an empty full-screen layer is still a surface to keep.
+    visible: store.shown && tempo > 0
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
@@ -295,24 +323,46 @@ Item {
       Region { item: dogView.toy }
     }
 
+    // 20 times a second while something moves, 5 while all hold still (only sprites animate then,
+    // on their own clock), once a second while everyone is off screen.
+    property real tickedAt: 0
+    property real ledgesAt: 0
     Timer {
-      interval: 33
-      running: store.shown && win.width > 0 && win.height > 0
+      interval: win.tempo === 2 ? 50 : win.tempo === 1 ? 200 : 1000
+      running: store.shown && win.fullWidth > 0 && win.fullHeight > 0
       repeat: true
       onTriggered: {
-        var live = win.views.filter(v => v.active)
-        for (var i = 0; i < live.length; i++) {
-          var b = win.boundsFor(live[i])
+        var now = Date.now()
+        // The real time since the last tick, so the pace is the same at every rate; capped so a
+        // stalled shell doesn't make them jump.
+        var dt = win.tickedAt > 0 ? Math.min(1.5, (now - win.tickedAt) / 1000) : interval / 1000
+        win.tickedAt = now
+        var views = win.views, out = 0, onWindow = false
+        for (var i = 0; i < views.length; i++) {
+          if (!views[i].active) continue
+          out++
+          var brain = views[i].brain
+          if (brain && (brain.goal !== null || brain.perch !== null)) onWindow = true
+        }
+        // A window can vanish under a climber at any moment, so look again several times a second
+        // while one is on its way up or sitting on top.
+        if (onWindow && now - win.ledgesAt >= 250) {
+          win.ledgesAt = now
+          win.refreshLedges()
+        }
+        var tempo = 0, nth = 0
+        for (var j = 0; j < views.length; j++) {
+          var view = views[j]
+          if (!view.active) continue
+          var b = win.boundsFor(view)
           // Two pets start apart, either side of the middle.
-          if (!live[i].brain) live[i].brain = Brain.create(b.w * (live.length > 1 ? 0.35 + 0.3 * i : 0.5), b.floor)
+          if (!view.brain) view.brain = Brain.create(b.w * (out > 1 ? 0.35 + 0.3 * nth : 0.5), b.floor)
+          nth++
+          Brain.tick(view.brain, dt, b, Math.random)
+          view.sync()
+          tempo = Math.max(tempo, Brain.tempo(view.brain))
         }
-        // Windows can vanish under a climber at any moment, so recheck every tick while one is on
-        // its way up or sitting on top.
-        if (live.some(v => v.brain.goal !== null || v.brain.perch !== null)) win.refreshLedges()
-        for (var j = 0; j < live.length; j++) {
-          Brain.tick(live[j].brain, interval / 1000, win.boundsFor(live[j]), Math.random)
-          live[j].sync()
-        }
+        win.tempo = tempo
       }
     }
 
@@ -399,6 +449,7 @@ Item {
           frameCount: pet.anim.frames
           // With music on, a sitting pet's tail keeps a quicker beat.
           frameRate: pet.mode === "sit" && root.music ? pet.anim.fps * 2.5 : pet.anim.fps
+          running: pet.mode !== "away"   // nobody to see it
           interpolate: false
           smooth: false
           transform: Scale { origin.x: view.size / 2; xScale: pet.dir }
@@ -414,6 +465,7 @@ Item {
         onPressed: mouse => { grabX = mouse.x; grabY = mouse.y }
         onPositionChanged: mouse => {
           if (!view.brain) return
+          root.hurry()
           if (view.brain.mode !== "held") {
             if (Math.abs(mouse.x - grabX) + Math.abs(mouse.y - grabY) < 6) return
             Brain.grab(view.brain)
@@ -424,6 +476,7 @@ Item {
         }
         onReleased: {
           if (!view.brain) return
+          root.hurry()
           if (view.brain.mode === "held") Brain.drop(view.brain)
           else Brain.pet(view.brain)
           view.sync()
@@ -521,6 +574,7 @@ Item {
           grabX = mouse.x; grabY = mouse.y
           vx = vy = 0
           lastT = Date.now()
+          root.hurry()
           view.brain.ball.held = true
         }
         onPositionChanged: mouse => {

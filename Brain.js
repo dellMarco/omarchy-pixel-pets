@@ -153,6 +153,19 @@ function create(x, y) {
   }
 }
 
+// Modes in which she holds still: only the sprite animates, nothing moves across the screen.
+var STILL = { idle: true, sit: true, sleep: true, groom: true, yawn: true, stretch: true, petted: true,
+              bark: true, invite: true, belly: true }
+
+// How closely she needs watching, so Service.qml can tick no faster than it has to:
+// 2 on the move (she, or her toy), 1 holding still, 0 off screen with nothing of hers in sight.
+function tempo(s) {
+  var o = s.ball
+  if (o && (o.held || o.carried || o.vx * o.vx + o.vy * o.vy > 1)) return 2
+  if (s.mode === "away") return o ? 1 : 0
+  return STILL[s.mode] ? 1 : 2
+}
+
 // Whether Service.qml needs to keep the mouse position fresh.
 function watchesCursor(mode) {
   return !!REACTIVE[mode] || mode === "crouch" || mode === "pounce"
@@ -567,7 +580,11 @@ function watchCursor(s, b, dt) {
   var c = b.cursor, l = s.lastCursor
   if (c && l && Math.abs(c.x - l.x) + Math.abs(c.y - l.y) > 3) s.cursorStill = 0
   else s.cursorStill += dt
-  s.lastCursor = c ? { x: c.x, y: c.y } : null
+  if (!c) s.lastCursor = null
+  else if (l) {
+    l.x = c.x
+    l.y = c.y
+  } else s.lastCursor = { x: c.x, y: c.y }
   if (s.bored > 0) s.bored -= dt
 }
 

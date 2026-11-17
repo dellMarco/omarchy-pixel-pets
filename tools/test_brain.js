@@ -652,4 +652,36 @@ for (const species of ["cat", "dog"]) {
     assert(!dog.ball.asked, "a fresh ball is a plain one")
   }
 }
+// ---------- Ticked only as fast as needed: the same life at every rate ----------
+{
+  const pb = { w: 1824, floor: 989, ground: 1079, size: 96, ballSize: 36, ledges: [], species: "cat", energy: 0.5 }
+  const p = B.create(600, pb.floor)
+  B.tick(p, 1 / 30, pb, rand)
+  p.mode = "sleep"; assert.strictEqual(B.tempo(p), 1, "asleep: holding still")
+  p.mode = "walk"; assert.strictEqual(B.tempo(p), 2, "walking: on the move")
+  p.mode = "away"; assert.strictEqual(B.tempo(p), 0, "off screen with nothing left behind: gone")
+  p.ball = { held: false, carried: false, vx: 0, vy: 0 }; assert.strictEqual(B.tempo(p), 1, "her yarn still lies there")
+  p.ball.vx = 200; assert.strictEqual(B.tempo(p), 2, "a rolling toy needs watching")
+  p.mode = "sit"; p.ball = { held: true, carried: false, vx: 0, vy: 0 }; assert.strictEqual(B.tempo(p), 2, "so does one in the hand")
+
+  // A day ticked the way the window does it (20, 5 or 1 times a second) comes out like one ticked evenly.
+  for (const species of ["cat", "dog"]) {
+    const b = Object.assign({}, pb, { species, floor: 989 }), q = B.create(600, b.floor)
+    const rate = [1, 0.2, 0.05]
+    let t = 0, away = 0, asleep = 0, here = 0, ticks = 0
+    while (t < 3600 * 24) {
+      const dt = rate[B.tempo(q)]
+      B.tick(q, dt, b, rand)
+      t += dt; ticks++
+      assert(Number.isFinite(q.x) && Number.isFinite(q.y), "lost her place")
+      assert(B.OFFSCREEN[q.mode] || (q.x >= 0 && q.x <= b.w), q.mode + " off screen at " + q.x)
+      if (q.mode === "away") away += dt
+      else if (!B.OFFSCREEN[q.mode]) { here += dt; if (q.mode === "sleep") asleep += dt }
+    }
+    const want = species === "cat" ? 0.5 : 0.2
+    assert(Math.abs(away / t - want) < 0.07, species + " away share at mixed rates: " + (away / t).toFixed(2))
+    assert(asleep / here > 0.3 && asleep / here < 0.5, species + " asleep at mixed rates: " + (asleep / here).toFixed(2))
+    assert(ticks < 3600 * 24 * 30 * 0.4, "far fewer ticks than 30 a second all day: " + ticks)
+  }
+}
 console.log("brain ok")
