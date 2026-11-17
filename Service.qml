@@ -140,11 +140,18 @@ Item {
   function hurry() { win.hurry() }
 
   // ---------- Tour: everything the pets do, one thing at a time, each with its name ----------
-  // Started (and stopped) from outside: omarchy-shell pixel-pets tour
+  // Driven from outside by tools/tour.sh (omarchy-shell pixel-pets tour | status | stop).
   IpcHandler {
     target: "pixel-pets"
-    function tour(): void { root.touring ? root.endTour() : root.startTour() }
+    function tour(): void { if (!root.touring) root.startTour() }
     function stop(): void { root.endTour() }
+    // What is on right now: "3/45 Sit (cat)", "waiting" between steps, or "" when no tour runs.
+    function status(): string {
+      if (!root.touring || root.tourAt >= root.tourSteps.length) return ""
+      var entry = root.tourSteps[root.tourAt]
+      if (root.tourSince === 0) return "waiting"
+      return (root.tourAt + 1) + "/" + root.tourSteps.length + " " + entry.step.name + " (" + (entry.partner ? "both" : entry.view.species) + ")"
+    }
   }
   property var tourSteps: []      // { view, partner, step }, in order
   property int tourAt: -1
@@ -393,6 +400,11 @@ Item {
           // shared: whatever is reported in the two seconds after a switch is ignored.
           win.switchedAt = Date.now()
           openedCheck.stop()
+          // The window she scratched is not on this workspace: the marks go with it, at once.
+          for (var v = 0; v < win.views.length; v++) {
+            win.views[v].markGone = true
+            if (win.views[v].brain) win.views[v].brain.mark = null
+          }
         } else if (name === "screencast") {
           // "state,owner": a monitor or a single window is being captured (1) or no longer is (0).
           var on = data.split(",")[0] === "1"
@@ -515,6 +527,7 @@ Item {
     property string caption: ""
     // Scratch marks she left sliding down a window.
     property bool marked: false
+    property bool markGone: false   // wiped without the fade (a workspace switch)
     property int markX: 0
     property int markTop: 0
     property int markBottom: 0
@@ -546,6 +559,7 @@ Item {
       dream = brain.dream ? brain.dream.what : ""
       // Scratches only show while their window is still there; the place is kept so they can fade.
       var mark = brain.mark
+      if (mark && !marked) markGone = false   // fresh scratches
       marked = !!mark && win.rects[mark.id] !== undefined
       if (mark) {
         markX = Math.round(mark.x)
@@ -561,8 +575,8 @@ Item {
       y: view.markTop
       width: view.size
       height: Math.max(0, view.markBottom - view.markTop)
-      opacity: view.marked ? 0.85 : 0
-      visible: opacity > 0
+      opacity: view.marked ? 0.45 : 0
+      visible: opacity > 0 && !view.markGone
 
       Behavior on opacity {
         NumberAnimation { duration: 900 }

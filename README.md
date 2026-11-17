@@ -101,7 +101,7 @@ UPower for the battery, Wayland's idle notification for the nap while you're awa
 python3 tools/make_sprites.py   # redraw sprites/<species>-<coat>.png (coats are in CAT_COATS and DOG_COATS)
 python3 tools/make_preview.py . preview.png   # rebuild the store preview from the sprites
 node tools/test_brain.js        # behaviour self-check
-omarchy-shell pixel-pets tour   # live: every action in turn, named above the pet (again to stop)
+tools/tour.sh                   # live: every action in turn, named above the pet; Ctrl+C stops it
 omarchy plugin validate .
 
 # install the working copy (plugin folders may not be symlinks)

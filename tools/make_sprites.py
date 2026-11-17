@@ -149,7 +149,8 @@ def tail(g, points, wag=0):
 def chin_collar(g, cx, chin, half=3):
     """A dog's collar: a strap along the jaw line with the tag hanging below, chin being the row
     of the jaw's outline. Seen from the front a collar sits high on the neck right under the jaw,
-    no wider than the muzzle; drawn across the shoulders it reads as a scarf."""
+    no wider than the muzzle; drawn across the shoulders it reads as a scarf. Only the poses that
+    face you sitting up or hanging show it; walking, the head hides the neck."""
     if STYLE["face"] != "dog":
         return g
     for x in range(cx - half, cx + half + 1):
@@ -235,7 +236,7 @@ def stand(lift=(0, 0, 0, 0), bob=0, sway=0, eye="open", head_at=None):
         rect(g, x, 24, x + 2, 28 - l, "F")
         rect(g, x, 28 - l, x + 2, 28 - l, "B")
     hx, hy = head_at or (21, 14 + bob)
-    return chin_collar(over(outline(g), head(hx, hy, eye)), hx, hy + 6)
+    return over(outline(g), head(hx, hy, eye))
 
 
 def sit(flick=0, eye="open"):
@@ -418,7 +419,7 @@ def stretch(f, eye="closed", wag=0):
     ellipse(g, 17, 24, 7, 3, "F")
     rect(g, 17, 27, 28, 28, "F")                      # front legs stretched flat
     rect(g, 27, 27, 28, 28, "B")
-    return chin_collar(over(outline(g), head(22, 22, eye)), 22, 28)
+    return over(outline(g), head(22, 22, eye))
 
 
 def scratch(f):
@@ -443,7 +444,7 @@ def belly(f):
         rect(g, x, top, x + 1, top + 1, "B")
     for y in range(29, S):            # flat on the floor
         rect(g, 0, y, S - 1, y, None)
-    g = chin_collar(over(outline(g), head(22, 22, "happy")), 22, 28)
+    g = over(outline(g), head(22, 22, "happy"))
     stamp(g, 26, 8 - f, (".x.x.", "xxxxx", ".xxx.", "..x.."), "H")
     return g
 
@@ -901,7 +902,7 @@ def collar_half():
     return 2 if breed()["skull"][0] < 6 else 3
 
 
-def stand_dog(lift=(0, 0, 0, 0), bob=0, wag=0, eye="open", mouth="pant", head_at=None, paw=None, collar=True):
+def stand_dog(lift=(0, 0, 0, 0), bob=0, wag=0, eye="open", mouth="pant", head_at=None, paw=None):
     """Side-on body, front-facing head. lift = (back near, back far, front near, front far) in px."""
     b = breed()
     rx, ry = b["body"]
@@ -934,8 +935,7 @@ def stand_dog(lift=(0, 0, 0, 0), bob=0, wag=0, eye="open", mouth="pant", head_at
         post(a, "arm", 20, 20 + paw, 27, 21 + paw, "right")
         g = over(g, outline(a))
     hx, hy = head_at or (21, 14 + bob - (STYLE["breed"] == "dalmatian"))
-    g = over(g, dog_face(hx, hy, eye, mouth))
-    return chin_collar(g, hx, hy + 6, collar_half()) if collar else g
+    return over(g, dog_face(hx, hy, eye, mouth))
 
 
 def sit_dog(flick=0, eye="open", mouth="pant", scratch=None):
@@ -1023,7 +1023,7 @@ def bow_dog(up=1, eye="happy", mouth="pant", wag=0):
     post(body, "leg0", 7, 20 - up, 7 + w - 1, FLOOR, "bottom")
     post(body, "arm", 17, FLOOR - 1, 28, FLOOR, "right")
     g = over(g, outline(body))
-    return chin_collar(over(g, dog_face(22, 22, eye, mouth)), 22, 28, collar_half())
+    return over(g, dog_face(22, 22, eye, mouth))
 
 
 def leap_dog(f):
@@ -1037,7 +1037,7 @@ def leap_dog(f):
     post(g, "arm", 2, 22, 6, 23, "left")                 # hind legs kicked back
     blob(g, "torso", 13, 19, 9, 4)
     post(g, "arm", 19, 22 - f, 25, 23 - f, "right")      # forelegs reaching
-    return chin_collar(over(outline(g), dog_face(22, 14, "wide", "open")), 22, 20, collar_half())
+    return over(outline(g), dog_face(22, 14, "wide", "open"))
 
 
 def back_dog(f):
@@ -1057,7 +1057,7 @@ def back_dog(f):
     g = over(g, outline(legs))
     for y in range(FLOOR + 2, S):
         rect(g, 0, y, S - 1, y, None)
-    g = chin_collar(over(g, dog_face(22, 22, "happy", "pant")), 22, 28, collar_half())
+    g = over(g, dog_face(22, 22, "happy", "pant"))
     stamp(g, 26, 8 - f, (".x.x.", "xxxxx", ".xxx.", "..x.."), "H")
     return g
 
@@ -1070,7 +1070,7 @@ def ask_dog(f):
 def dine_dog(f, food):
     """Standing with his head down in the bowl: lapping water or crunching kibble."""
     # No collar: his chin is in the bowl.
-    g = stand_dog(wag=f % 2, eye="closed", mouth="shut", head_at=(23, 21 + (f % 2 if food else 0)), collar=False)
+    g = stand_dog(wag=f % 2, eye="closed", mouth="shut", head_at=(23, 21 + (f % 2 if food else 0)))
     b = bowl(food, f)
     for y in range(S):                # the rim's top outline stays behind his face
         for x in range(S):

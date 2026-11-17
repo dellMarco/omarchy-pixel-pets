@@ -40,7 +40,7 @@ var ANIMS = {
   fall:    { row: 6, frames: 2, fps: 8 },
   climb:   { row: 7, frames: 4, fps: 4 },
   descend: { row: 7, frames: 4, fps: 4 },
-  claw:    { row: 7, frames: 4, fps: 10 },   // sliding down the front of a window, claws out
+  claw:    { row: 7, frames: 1, fps: 1 },    // sliding down a window, claws in: she holds still
   peekup:  { row: 8, frames: 5, fps: 1.5 },
   peek:    { row: 8, frames: 5, fps: 1.5 },
   peekdown: { row: 8, frames: 5, fps: 1.5 },
