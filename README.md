@@ -7,7 +7,7 @@ screen, sits, naps, and stays out of your way: clicks next to her go straight th
 
 - **Click** her to pet her.
 - **Drag** her to pick her up, let go to drop her.
-- **Double-click** her to give her a ball of yarn. She chases and bats it around; you can drag and throw it too.
+- The **yarn ball** button in the settings gives her a ball of yarn. She chases and bats it around; you can drag and throw it too.
 - Wiggle the **mouse** near the bottom of the screen and she may stalk and pounce on it.
 
 Now and then she climbs up one of your windows (back to you, tail swinging), slips over its top edge and peeks
@@ -24,6 +24,40 @@ Click the cat icon in the bar to open her settings: name, coat (orange, grey, tu
 size, energy (lazy to playful), whether she follows the time of day (lively mornings, sleepy evenings and
 nights), whether she chases the mouse or climbs windows, and a button to give her
 a yarn ball. Right-click the icon to hide or show her. Her name pops up when you pet her.
+
+The **Pets** switch at the top of the settings picks a cat, a dog, or both. Each has its own name and
+coats (dog: golden, shiba, husky, dalmatian, chocolate). A dog stays on the ground: no window climbing.
+He fetches a thrown tennis ball back to where it was thrown from and barks for another throw, sniffs
+along the floor, scratches behind his ear, chases his tail, and play-bows before pouncing on the mouse.
+Energy and the time of day steer him exactly as they steer the cat.
+
+With both out they visit each other now and then, more often the livelier they are: they sit together,
+play (a play bow from the dog, a paw on the nose from the cat), or nap side by side.
+
+Each pet wanders off past the edge of the screen now and then and is gone for a few minutes:
+the cat for about half the time, the dog for about 20%. Giving or picking up its toy calls it back.
+
+## Things they get up to
+
+How often the self-started ones happen follows the energy slider and the time of day.
+
+- **Cuddling:** a pet joining a sleeper lies down face to face with it, heads just touching.
+- **The chase:** a lively dog sometimes chases the cat. She escapes up a window and peeks down (if
+  "Peek over windows" is on), or bolts off the screen edge and strolls back in; he barks after her.
+- **Contagious yawn:** one yawns, the other often follows, and now and then both nap.
+- **Welcome back:** leave the desk for a few minutes and they nap. Touch the mouse and the dog runs to
+  your pointer for hearts; the cat stretches and yawns. Sleepy pets just stretch and sleep on.
+- **Petting has a limit:** after a few quick pets the cat swats the pointer, walks off and sulks for a
+  bit. A few more and the dog rolls over for a belly rub.
+- **Ask to play:** four times a day, at random moments between 9 and 21 o'clock, the dog brings you his
+  ball unasked and bows; ignored, he lies down next to it. Once a day the cat nudges her yarn your way.
+- **Zoomies:** at high energy, a sudden race from one end of the screen to the other and back.
+- **Dreams:** once per long nap a thought bubble shows the toy or the other pet.
+- **Music:** while something plays, sitting tails flick faster and the dog spins more.
+- **Startled:** a window opening or closing right over a pet makes the cat hop and scurry off and
+  the dog bark, at most once every few minutes.
+- **Camera shy:** while the screen is shared or recorded they run off and stay away. Switch in the settings.
+- **Low battery:** below 20% they get sleepy, below 10% they sleep; plugging in wakes them.
 
 Settings are saved in `~/.config/omarchy/pixel-pets.json`.
 
