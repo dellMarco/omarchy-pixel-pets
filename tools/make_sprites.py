@@ -146,19 +146,20 @@ def tail(g, points, wag=0):
             rect(g, x, y, x, y + w - 1, "F")
 
 
-def band(g, x0, y0, x1, y1, c):
-    """Recolour what is already drawn inside the box: a collar follows the body's shape."""
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
-            if 0 <= x < S and 0 <= y < S and g[y][x]:
-                g[y][x] = c
-
-
-def collar(g, cx, y):
-    """A dog's collar with its tag, on a body whose neck is centred on cx."""
-    if STYLE["face"] == "dog":
-        band(g, cx - 5, y, cx + 5, y + 1, "c")
-        band(g, cx, y + 2, cx, y + 2, "t")
+def chin_collar(g, cx, chin, half=3):
+    """A dog's collar: a strap along the jaw line with the tag hanging below, chin being the row
+    of the jaw's outline. Seen from the front a collar sits high on the neck right under the jaw,
+    no wider than the muzzle; drawn across the shoulders it reads as a scarf."""
+    if STYLE["face"] != "dog":
+        return g
+    for x in range(cx - half, cx + half + 1):
+        for y in range(chin - 3, chin + 1):              # the jaw's outline in this column
+            if g[y][x] == "O":
+                g[y][x] = "c"
+                break
+    if chin + 1 <= 29:
+        px(g, cx, chin + 1, "t")
+    return g
 
 
 def ears(g, cx, cy, inner):
@@ -234,7 +235,7 @@ def stand(lift=(0, 0, 0, 0), bob=0, sway=0, eye="open", head_at=None):
         rect(g, x, 24, x + 2, 28 - l, "F")
         rect(g, x, 28 - l, x + 2, 28 - l, "B")
     hx, hy = head_at or (21, 14 + bob)
-    return over(outline(g), head(hx, hy, eye))
+    return chin_collar(over(outline(g), head(hx, hy, eye)), hx, hy + 6)
 
 
 def sit(flick=0, eye="open"):
@@ -242,10 +243,9 @@ def sit(flick=0, eye="open"):
     tail(g, [(9, 27), (7, 27), (6, 26), (5, 25), (4, 24), (4, 23 - flick), (5, 22 - flick)], flick)
     ellipse(g, 16, 22.5, 6.5, 6, "F")
     ellipse(g, 16, 23, 3, 4, "B")
-    collar(g, 16, 18)
     rect(g, 12, 27, 14, 28, "B")
     rect(g, 18, 27, 20, 28, "B")
-    return over(outline(g), head(16, 12, eye))
+    return chin_collar(over(outline(g), head(16, 12, eye)), 16, 18)
 
 
 def sleep(f):
@@ -282,8 +282,7 @@ def dangle(f, eye="open"):
     rect(g, 19 + f, 26, 20 + f, 30, "F")
     rect(g, 9, 19 - f, 11, 20 - f, "F")    # arms
     rect(g, 21, 19 - f, 23, 20 - f, "F")
-    collar(g, 16, 17)
-    return over(outline(g), head(16, 11, eye))
+    return chin_collar(over(outline(g), head(16, 11, eye)), 16, 17)
 
 
 def back_head(cx, cy):
@@ -352,7 +351,6 @@ def hang(swing=0, eye="open"):
     ellipse(g, 16, 22, 2.5, 4.5, "B")
     rect(g, 12 + swing, 26, 13 + swing, 30, "F")
     rect(g, 19 + swing, 26, 20 + swing, 30, "F")
-    collar(g, 16, 17)
     return over(outline(g), head(16, 11, eye))
 
 
@@ -420,7 +418,7 @@ def stretch(f, eye="closed", wag=0):
     ellipse(g, 17, 24, 7, 3, "F")
     rect(g, 17, 27, 28, 28, "F")                      # front legs stretched flat
     rect(g, 27, 27, 28, 28, "B")
-    return over(outline(g), head(22, 22, eye))
+    return chin_collar(over(outline(g), head(22, 22, eye)), 22, 28)
 
 
 def scratch(f):
@@ -445,7 +443,7 @@ def belly(f):
         rect(g, x, top, x + 1, top + 1, "B")
     for y in range(29, S):            # flat on the floor
         rect(g, 0, y, S - 1, y, None)
-    g = over(outline(g), head(22, 22, "happy"))
+    g = chin_collar(over(outline(g), head(22, 22, "happy")), 22, 28)
     stamp(g, 26, 8 - f, (".x.x.", "xxxxx", ".xxx.", "..x.."), "H")
     return g
 
@@ -898,16 +896,12 @@ def dog_face(cx, cy, eye="open", mouth="pant"):
     return g
 
 
-def collar_band(g, cx, y):
-    """The collar across a front-facing chest, with its tag."""
-    for yy in (y, y + 1):
-        for x in range(cx - 5, cx + 6):
-            if g[yy][x]:
-                g[yy][x] = "c"
-    px(g, cx, y + 2, "t")
+def collar_half():
+    """Half the collar's width: no wider than the muzzle, so narrower on a narrow head."""
+    return 2 if breed()["skull"][0] < 6 else 3
 
 
-def stand_dog(lift=(0, 0, 0, 0), bob=0, wag=0, eye="open", mouth="pant", head_at=None, paw=None):
+def stand_dog(lift=(0, 0, 0, 0), bob=0, wag=0, eye="open", mouth="pant", head_at=None, paw=None, collar=True):
     """Side-on body, front-facing head. lift = (back near, back far, front near, front far) in px."""
     b = breed()
     rx, ry = b["body"]
@@ -940,7 +934,8 @@ def stand_dog(lift=(0, 0, 0, 0), bob=0, wag=0, eye="open", mouth="pant", head_at
         post(a, "arm", 20, 20 + paw, 27, 21 + paw, "right")
         g = over(g, outline(a))
     hx, hy = head_at or (21, 14 + bob - (STYLE["breed"] == "dalmatian"))
-    return over(g, dog_face(hx, hy, eye, mouth))
+    g = over(g, dog_face(hx, hy, eye, mouth))
+    return chin_collar(g, hx, hy + 6, collar_half()) if collar else g
 
 
 def sit_dog(flick=0, eye="open", mouth="pant", scratch=None):
@@ -958,13 +953,12 @@ def sit_dog(flick=0, eye="open", mouth="pant", scratch=None):
             blob(g, "torso", 16 + s * 5.5, 25.5, 2.6, 3)  # haunches
     rx = 6 if b["legw"] == 2 else 6.5
     blob(g, "front", 16, 22.5, rx, 6)
-    collar_band(g, 16, 17)
     g = outline(g)
     legs = grid()
     for slot, x in ((3, 13 - (w == 2)), (2, 18)):
         post(legs, f"leg{slot}", x, 23, x + w - 1, FLOOR, "bottom")
     g = over(g, outline(legs))
-    g = over(g, dog_face(16, 12, eye, mouth))
+    g = chin_collar(over(g, dog_face(16, 12, eye, mouth)), 16, 18, collar_half())
     if scratch is not None:                              # bent hind leg: knee out, paw up at the ear
         lg = grid()
         stroke(lg, "leg", [(21, 25.5), (25, 22.5), (23, 14.5 + scratch)], (2,))
@@ -1005,7 +999,6 @@ def held_dog(f, eye="open", mouth="shut"):
     else:
         dog_tail(g, [(11, 26), (9.5, 27.5), (8.5 + f, 29), (8.5 + f, 30.5)])
     blob(g, "front", 16, 21, 5, 7)
-    collar_band(g, 16, 16)
     g = outline(g)
     limbs = grid()
     for slot, x in ((0, 12 - f), (1, 19 + f)):
@@ -1013,7 +1006,7 @@ def held_dog(f, eye="open", mouth="shut"):
     for x0, x1 in ((9, 11), (21, 23)):
         post(limbs, "arm", x0, 19 - f, x1, 20 - f, "left" if x0 < 16 else "right")
     g = over(g, outline(limbs))
-    return over(g, dog_face(16, 11, eye, mouth))
+    return chin_collar(over(g, dog_face(16, 11, eye, mouth)), 16, 17, collar_half())
 
 
 def bow_dog(up=1, eye="happy", mouth="pant", wag=0):
@@ -1030,7 +1023,7 @@ def bow_dog(up=1, eye="happy", mouth="pant", wag=0):
     post(body, "leg0", 7, 20 - up, 7 + w - 1, FLOOR, "bottom")
     post(body, "arm", 17, FLOOR - 1, 28, FLOOR, "right")
     g = over(g, outline(body))
-    return over(g, dog_face(22, 22, eye, mouth))
+    return chin_collar(over(g, dog_face(22, 22, eye, mouth)), 22, 28, collar_half())
 
 
 def leap_dog(f):
@@ -1044,7 +1037,7 @@ def leap_dog(f):
     post(g, "arm", 2, 22, 6, 23, "left")                 # hind legs kicked back
     blob(g, "torso", 13, 19, 9, 4)
     post(g, "arm", 19, 22 - f, 25, 23 - f, "right")      # forelegs reaching
-    return over(outline(g), dog_face(22, 14, "wide", "open"))
+    return chin_collar(over(outline(g), dog_face(22, 14, "wide", "open")), 22, 20, collar_half())
 
 
 def back_dog(f):
@@ -1064,7 +1057,7 @@ def back_dog(f):
     g = over(g, outline(legs))
     for y in range(FLOOR + 2, S):
         rect(g, 0, y, S - 1, y, None)
-    g = over(g, dog_face(22, 22, "happy", "pant"))
+    g = chin_collar(over(g, dog_face(22, 22, "happy", "pant")), 22, 28, collar_half())
     stamp(g, 26, 8 - f, (".x.x.", "xxxxx", ".xxx.", "..x.."), "H")
     return g
 
@@ -1076,7 +1069,8 @@ def ask_dog(f):
 
 def dine_dog(f, food):
     """Standing with his head down in the bowl: lapping water or crunching kibble."""
-    g = stand_dog(wag=f % 2, eye="closed", mouth="shut", head_at=(23, 21 + (f % 2 if food else 0)))
+    # No collar: his chin is in the bowl.
+    g = stand_dog(wag=f % 2, eye="closed", mouth="shut", head_at=(23, 21 + (f % 2 if food else 0)), collar=False)
     b = bowl(food, f)
     for y in range(S):                # the rim's top outline stays behind his face
         for x in range(S):
