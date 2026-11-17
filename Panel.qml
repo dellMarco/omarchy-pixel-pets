@@ -49,6 +49,7 @@ Panel {
     energy: ["Energy", "More walking and play, less sleep, and more things done on their own: visits, the dog chasing the cat (not when lazy), zoomies (only near playful). Toys they bring unasked (dog four times a day, cat once) and trips off screen don't depend on it."],
     dayCycle: ["Follow time of day", "Off: energy stays where the slider is, all day. On: lively mornings, sleepy evenings and nights around it. The phase right now shows next to ENERGY."],
     cameraShy: ["Camera shy", "They run off screen once the screen or a window has been shared for a few seconds, and come back about 15 seconds after it stops. A screenshot or a quick thumbnail doesn't count."],
+    wander: ["Wander off", "Each leaves the screen now and then on its own clock and comes back a few minutes later: the cat is away about half the time, the dog about a fifth. A toy or a due reminder calls them back. Off: they stay on screen, and whoever is away comes back."],
     chaseMouse: ["Stalk the pointer", "They crouch and pounce at the pointer when it moves near the bottom edge. Off: they ignore it, and a toy they bring is dropped anywhere, not below the pointer."],
     hangOnWindows: ["Cat climbs windows", "She climbs windows, on her own and to escape the dog: onto the top to walk, sit and nap if there is room above. Right under the bar a small cat prowls and naps in front of it (a click shoos her down, claws out); a bigger one peeks over. Off: she stays on the floor."],
     reminders: ["Care reminders", "On a timer a pet sits with a speech bubble asking for water, food or a break; with both out they take turns. Click it to serve: it drinks, eats, or gets its toy. Ignored for five minutes, it comes over to the pointer."],
@@ -372,6 +373,15 @@ Panel {
             fontFamily: root.bar.fontFamily
             onClicked: root.set("cameraShy", !checked)
             onHovered: function(isHovered) { root.over("cameraShy", isHovered) }
+          }
+          Toggle {
+            width: switches.cellWidth
+            label: "Wander off"
+            checked: root.store ? root.store.wander : false
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            onClicked: root.set("wander", !checked)
+            onHovered: function(isHovered) { root.over("wander", isHovered) }
           }
           Toggle {
             width: switches.cellWidth

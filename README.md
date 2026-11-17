@@ -49,7 +49,7 @@ With both out they visit each other now and then, more often the livelier they a
 play (a play bow from the dog, a paw on the nose from the cat), or nap side by side.
 
 Each pet wanders off past the edge of the screen now and then and is gone for a few minutes:
-the cat for about half the time, the dog for about 20%. Giving or picking up its toy calls it back.
+the cat for about half the time, the dog for about 20%. Giving or picking up its toy calls it back. "Wander off" in the settings turns this off.
 
 ## Things they get up to
 

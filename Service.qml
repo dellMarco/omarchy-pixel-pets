@@ -240,6 +240,7 @@ Item {
       property bool hangOnWindows: true
       property bool dayCycle: true
       property bool cameraShy: true
+      property bool wander: true
       property bool reminders: true
       property int waterMinutes: 45
       property int foodMinutes: 240
@@ -287,6 +288,7 @@ Item {
         ballSize: view.ballSize,
         cursor: store.chaseMouse ? cursor : null,
         energy: root.energy,
+        wander: store.wander,
         hour: root.hour,
         day: root.day,
         music: root.music,

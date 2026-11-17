@@ -10,6 +10,7 @@
 //            ballSize: yarn ball size,
 //            cursor: { x, y } mouse position, or null when it is not on this screen,
 //            species: "cat" | "dog",
+//            wander: false keeps them from leaving the screen on their own (default: they do);
 //            music: something is playing; hide: the screen is being shared, stay out of sight;
 //            exhausted: the battery is nearly empty, sleep;
 //            day: a number that changes at midnight, hour: local time 0..24 (both optional:
@@ -578,7 +579,7 @@ function next(s, b, rand) {
     s.offerDone[due] = true
     return offer(s, b, rand)
   }
-  if (s.stay <= 0) {
+  if (s.stay <= 0 && b.wander !== false) {
     // Nor out right behind the other: if it has just gone, hang about a little longer.
     var o = b.friend
     if (o && (o.mode === "leave" || (o.mode === "away" && o.t < 90))) s.stay = 30 + rand() * 120
@@ -732,6 +733,12 @@ function tick(s, dt, b, rand) {
     s.onFor += dt
   }
   if (s.mark && s.mode !== "claw" && (s.mark.left -= dt) <= 0) s.mark = null
+  // Wandering switched off: whoever is on the way out turns round, whoever is out comes back.
+  // (Hiding from a shared screen and the tour's own trip are not wandering.)
+  if (b.wander === false && !b.hide && !s.staged) {
+    if (s.mode === "leave") setMode(s, "idle", 0.5)
+    else if (s.mode === "away") s.until = Math.min(s.until, s.t)
+  }
   watchCursor(s, b, dt)
   moveBall(s, b, dt, rand)
   tease(s, b, dt, rand)
@@ -1200,7 +1207,7 @@ function tour(species) {
     { name: "Zoomies", seconds: 25, start: function(s, b, rand) { zoomies(s, b, rand) },
       done: function(s) { return s.mode !== "zoom" } },
     { name: "Wandering off and back", seconds: 90,
-      start: function(s, b, rand) { away = false; setMode(s, "idle", 1); leave(s, b, rand); s.awayFor = 2 },
+      start: function(s, b, rand) { away = false; setMode(s, "idle", 1); s.staged = {}; leave(s, b, rand); s.awayFor = 2 },
       done: function(s) { if (s.mode === "away") away = true; return away && !OFFSCREEN[s.mode] } }
   ]
   if (dog) steps.push(

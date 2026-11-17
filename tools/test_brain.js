@@ -911,4 +911,26 @@ for (const species of ["cat", "dog"]) {
   B.tourEnd(cat, rand); B.tourEnd(dog, rand)
   assert(cat.staged === null && cat.stay < 1e6, "back to their own lives afterwards")
 }
+// ---------- Wandering can be switched off ----------
+for (const species of ["cat", "dog"]) {
+  const pb = extra => Object.assign({ w: 1824, floor: 989, ground: 1079, size: 96, ballSize: 36, ledges: [], species, energy: 0.5 }, extra)
+  const home = B.create(600, 989)
+  for (let i = 0; i < 30 * 3600 * 6; i++) {
+    B.tick(home, 1 / 30, pb({ wander: false }), rand)
+    assert(!B.OFFSCREEN[home.mode], species + " left though wandering is off")
+  }
+  // Switched off while she is out, or on her way: she comes back, or turns round.
+  const out = B.create(600, 989)
+  for (let i = 0; i < 30 * 3600 * 2 && out.mode !== "away"; i++) B.tick(out, 1 / 30, pb(), rand)
+  assert.strictEqual(out.mode, "away")
+  for (let i = 0; i < 30 * 90 && B.OFFSCREEN[out.mode]; i++) B.tick(out, 1 / 30, pb({ wander: false }), rand)
+  assert(!B.OFFSCREEN[out.mode] && out.x >= 0 && out.x <= 1824, species + " came back when wandering was switched off")
+  const going = B.create(600, 989)
+  for (let i = 0; i < 30 * 3600 * 2 && going.mode !== "leave"; i++) B.tick(going, 1 / 30, pb(), rand)
+  B.tick(going, 1 / 30, pb({ wander: false }), rand)
+  assert.strictEqual(going.mode, "idle", "turns round on the way out")
+  // A shared screen still sends her off.
+  for (let i = 0; i < 30 * 30; i++) B.tick(going, 1 / 30, pb({ wander: false, hide: true }), rand)
+  assert.strictEqual(going.mode, "away", "camera shy is not wandering")
+}
 console.log("brain ok")
