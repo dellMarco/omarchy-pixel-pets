@@ -3,10 +3,30 @@
 // Pet behaviour. Pure logic, no QML: Service.qml calls tick() ~30x a second.
 // Positions are the sprite's top-left in logical px.
 // bounds = { w: max x, floor: resting y, size: sprite size,
+//            ground: y the ball rests on (its bottom edge); floor + size when not given,
+//            friend: the other pet's state when two are out, else null; friendSize: its sprite size,
 //            peek: how far above a window edge the sprite top sits when peeking over it,
 //            ledges: [{ id, x, y, w }] window top edges she may peek over,
 //            ballSize: yarn ball size,
-//            cursor: { x, y } mouse position, or null when it is not on this screen }
+//            cursor: { x, y } mouse position, or null when it is not on this screen,
+//            species: "cat" | "dog",
+//            music: something is playing; hide: the screen is being shared, stay out of sight;
+//            exhausted: the battery is nearly empty, sleep;
+//            day: a number that changes at midnight, hour: local time 0..24 (both optional:
+//            without them no toy is ever brought unasked) }
+
+// What a species does differently; everything else is shared.
+// A cat climbs windows and bats her yarn about. A dog stays on the ground, fetches his ball back
+// to where it was thrown from, sniffs along the floor, barks and chases his tail.
+var TRAITS = {
+  // away: the share of the time spent off screen. The cat roams far more than the dog.
+  // asks: times a day it brings its toy unasked.
+  cat: { climbs: true, fetches: false, away: 0.5, asks: 1 },
+  dog: { climbs: false, fetches: true, away: 0.2, asks: 4 }
+}
+function traits(b) {
+  return TRAITS[b.species] || TRAITS.cat
+}
 
 // Must match the row order / frame counts in tools/make_sprites.py
 var ANIMS = {
@@ -28,17 +48,67 @@ var ANIMS = {
   bat:     { row: 11, frames: 2, fps: 6 },
   groom:   { row: 12, frames: 4, fps: 4 },
   stretch: { row: 13, frames: 3, fps: 2 },
-  yawn:    { row: 14, frames: 3, fps: 2 }
+  yawn:    { row: 14, frames: 3, fps: 2 },
+  // Wandering off the edge of the screen and coming back.
+  leave:   { row: 1, frames: 6, fps: 10 },
+  away:    { row: 0, frames: 4, fps: 3 },
+  enter:   { row: 1, frames: 6, fps: 10 },
+  // Dog only. Rows 16 and up exist only on the dog sheets.
+  // Short bursts: a startled hop, running off, racing about, running to greet.
+  hop:     { row: 6, frames: 2, fps: 8 },
+  scurry:  { row: 1, frames: 6, fps: 16 },
+  flee:    { row: 1, frames: 6, fps: 18 },
+  zoom:    { row: 1, frames: 6, fps: 20 },
+  greet:   { row: 1, frames: 6, fps: 16 },
+  chase:   { row: 1, frames: 6, fps: 16 },
+  invite:  { row: 9, frames: 2, fps: 6 },   // play bow: at the cat, or after bringing the ball
+  belly:   { row: 18, frames: 2, fps: 6 },  // on his back for a belly rub
+  carry:   { row: 1, frames: 6, fps: 14 },
+  spin:    { row: 1, frames: 6, fps: 16 },
+  sniff:   { row: 16, frames: 4, fps: 6 },
+  bark:    { row: 17, frames: 2, fps: 5 }
 }
 var YARN_ROW = 15
 var YARN_FRAMES = 4
 
 var SPEED = 60          // px/s walking
 var RUN_SPEED = 150     // px/s chasing the ball
+// Modes that move along the floor towards targetX, and how fast.
+var PACE = {
+  walk: SPEED, sniff: 35, run: RUN_SPEED, carry: 120, leave: SPEED, enter: SPEED,
+  chase: RUN_SPEED, flee: 190, scurry: RUN_SPEED, greet: RUN_SPEED, zoom: 320
+}
+// Of those, the ones that end on arrival and then decide what comes next.
+var ARRIVES = { walk: true, sniff: true, leave: true, enter: true, flee: true, scurry: true, greet: true, zoom: true }
+var HOP_HEIGHT = 30     // px
+var SPIN_FLIP = 0.16    // s between turns while chasing his tail
+// Where the ball cell sits in the 32px frame while carried in the mouth, facing right.
+var MOUTH = { x: 17, y: 11 }
 var GRAVITY = 1800      // px/s^2
 var HANG_CHANCE = 0.15  // share of idle decisions that go for a window
 var CLIMB_SPEED = 90    // px/s climbing up / down the front of a window
 var PEEK_SPEED = 25     // px/s rising over / sinking below the window edge
+
+// Each pet wanders off the screen now and then; for what share of the time is in TRAITS.
+var STAY_MIN = 240      // s on screen before wandering off again, at least
+var STAY_SPAN = 480     // s more, at random
+// Modes in which she is, or may be, past the screen edge.
+var OFFSCREEN = { leave: true, away: true, enter: true, flee: true }
+
+var CHASE_SHARE = 0.3   // of the dog's visits, when he is lively enough, turn into a chase
+var CHASE_ENERGY = 0.35 // below this he can't be bothered
+var ASK_HOURS = [9, 21] // the toy is brought unasked between these hours
+var ASK_OPEN = 0.75     // hours such a moment stays open if she can't right then
+var ZOOM_ENERGY = 0.7   // zoomies only above this
+var PET_WINDOW = 4      // s within which pets count as "again"
+var CAT_PATIENCE = 3    // pets in a row a cat enjoys, at least (up to two more, and two more when sleepy)
+var DOG_BELLY = 5       // pets in a row, give or take one, and he rolls over
+var CALM = 240          // s at least between two startles
+
+// Two pets out together: share of idle decisions, at full energy, that go and see the other one.
+var MEET_CHANCE = 0.1
+// What the other pet may be doing when it gets a visit.
+var APPROACHABLE = { idle: true, sit: true, sleep: true, groom: true, yawn: true }
 
 var CURSOR_RANGE = 500  // px: how far away she notices the mouse
 var NOTICE_RATE = 0.8   // chance per second of noticing a moving mouse nearby
@@ -52,7 +122,7 @@ var BALL_BOUNCE = 0.45
 var BALL_FRICTION = 1.5 // rolling slowdown per second on the floor
 
 // Modes in which something interesting (ball, mouse) can catch her attention.
-var REACTIVE = { idle: true, sit: true, walk: true, run: true, groom: true, yawn: true }
+var REACTIVE = { idle: true, sit: true, walk: true, run: true, groom: true, yawn: true, sniff: true }
 // The trip up a window and back: climb the front (back to the viewer), go over the top edge,
 // peek over it from behind, come back over and climb down. Only the part of her between
 // clipTop and clipBottom is drawn: the edge hides whatever is on the far side of it.
@@ -63,6 +133,13 @@ function create(x, y) {
   return {
     mode: "idle", x: x, y: y, dir: 1, t: 0, until: 2, vy: 0, targetX: x, goal: null,
     ball: null, lastCursor: null, cursorStill: Infinity, pounces: 0, bored: 0, from: x, to: x,
+    visiting: false, then: null,
+    stay: null, onFor: 0,   // s left before wandering off; s on screen since she came back
+    pending: false, laps: 0, asking: false, askDay: null, askAt: [], askDone: [],
+    pets: 0, petT: Infinity, patience: null, grumpy: 0, calm: 0,
+    dream: null, dreamAt: null, settled: false,
+    // What the last tick knew, for the calls that come without bounds (pet).
+    species: "cat", energy: 0.5, w: 0,
     clipTop: -Infinity, clipBottom: Infinity
   }
 }
@@ -72,7 +149,17 @@ function watchesCursor(mode) {
   return !!REACTIVE[mode] || mode === "crouch" || mode === "pounce"
 }
 
+// Roughly x: 70% to 130% of it, so nothing takes the same time twice.
+function about(x, rand) {
+  return x * (0.7 + 0.6 * rand())
+}
+
 function setMode(s, mode, duration) {
+  // Whatever interrupts a visit or a queued reaction cancels it.
+  s.visiting = false
+  s.then = null
+  s.dream = null
+  s.dreamAt = null
   s.mode = mode
   s.t = 0
   s.until = duration
@@ -83,10 +170,10 @@ function setMode(s, mode, duration) {
   }
 }
 
-function walkTo(s, x) {
+function walkTo(s, x, mode) {
   s.targetX = x
   s.dir = x < s.x ? -1 : 1
-  setMode(s, "walk", Infinity)
+  setMode(s, mode || "walk", Infinity)
 }
 
 // The ledge she is heading for / hanging from, if it still exists and still spans her.
@@ -95,6 +182,169 @@ function ledge(s, b) {
   for (var i = 0; i < ls.length; i++)
     if (ls[i].id === s.goal && ls[i].x <= s.x && s.x + b.size <= ls[i].x + ls[i].w) return ls[i]
   return null
+}
+
+function ground(b) {
+  return b.ground === undefined ? b.floor + b.size : b.ground
+}
+
+// The other pet, if it is somewhere a visit makes sense.
+function friend(b) {
+  var f = b.friend
+  return f && APPROACHABLE[f.mode] && f.goal === null ? f : null
+}
+
+function visit(s, f, b) {
+  if (f.mode === "sleep") {
+    // Cuddle up: come in on the side her head is on, so the two lie face to face with the heads
+    // just overlapping. In the sleep frame the head spans columns 15..29 (3..17 when flipped).
+    var k = b.size / 32, kf = (b.friendSize || b.size) / 32
+    var cx = f.dir > 0 ? f.x + 26 * kf - 3 * k : f.x + 6 * kf - 29 * k
+    if (cx >= 0 && cx <= b.w) {
+      walkTo(s, cx)
+      s.visiting = true
+      return
+    }
+  }
+  // Positions are top-left corners and the two differ in size: stand beside, not on top.
+  var x = s.x < f.x ? f.x - b.size * 0.75 : f.x + (b.friendSize || b.size) * 0.75
+  walkTo(s, Math.max(0, Math.min(b.w, x)))
+  s.visiting = true
+}
+
+// Arrived next to the other pet. The pair is always one cat and one dog, so the visitor's
+// species says what both do: nap side by side, sit together, or play
+// (the dog bows and gets a paw on the nose; the cat taps first and gets a bow back).
+function meet(s, f, b, rand) {
+  s.dir = f.x < s.x ? -1 : 1
+  if (f.mode === "sleep") return setMode(s, "sleep", Math.max(10, f.until - f.t))
+  f.dir = -s.dir
+  if (rand() < 0.4) {
+    setMode(s, "sit", 3 + rand() * 3)
+    setMode(f, "sit", 3 + rand() * 3)
+  } else if (b.species === "dog") {
+    setMode(s, "invite", about(1.6, rand))
+    s.then = { mode: rand() < 0.7 ? "spin" : "bark", duration: about(1.2, rand) }
+    setMode(f, "sit", about(1, rand))
+    f.then = { mode: "bat", duration: 0.6 }
+  } else {
+    setMode(s, "bat", 0.6)
+    s.then = { mode: rand() < 0.7 ? "sit" : "groom", duration: about(3, rand) }
+    setMode(f, "sit", about(0.6, rand))
+    f.then = { mode: "invite", duration: about(1.4, rand) }
+  }
+}
+
+// The dog goes for the cat. Where she runs to is hers to decide, on her next tick.
+function chase(s, f) {
+  setMode(f, "flee", Infinity)
+  f.pending = true
+  s.dir = f.x < s.x ? -1 : 1
+  s.targetX = f.x
+  setMode(s, "chase", 20)
+}
+
+// Up the nearest window if she may climb, else out past the screen edge away from him.
+function planFlee(s, b, rand) {
+  s.pending = false
+  var ls = traits(b).climbs ? (b.ledges || []) : []
+  if (ls.length) {
+    var l = ls[Math.floor(rand() * ls.length)]
+    walkTo(s, Math.max(l.x, Math.min(l.x + l.w - b.size, s.x)), "flee")
+    s.goal = l.id
+    return
+  }
+  var from = b.friend ? b.friend.x : s.x
+  walkTo(s, s.x < from ? -b.size : b.w + b.size, "flee")
+}
+
+// One yawns, and about half the time the other, if awake, yawns a moment later.
+// Now and then both lie down for a nap after it.
+function yawnTogether(s, f, rand) {
+  setMode(s, "yawn", 1.5)
+  if (!f || f.mode === "sleep" || rand() >= 0.5) return
+  var nap = rand() < 0.25
+  if (nap) s.then = { mode: "sleep", duration: 30 + rand() * 30 }
+  setMode(f, "sit", 0.6 + rand() * 0.6)
+  f.then = { mode: "yawn", duration: 1.5, then: nap ? { mode: "sleep", duration: 30 + rand() * 30 } : null }
+}
+
+// When today a species brings its toy unasked: the hours are split into as many equal parts as
+// there are asks, with one moment at random in each. Random per day and species but the same
+// all day, so a shell restart doesn't deal new ones.
+function askTimes(day, species) {
+  var n = traits({ species: species }).asks, out = []
+  var x = (Math.abs(day) * 131 + (species === "dog" ? 7 : 3)) % 2147483646 + 1
+  var span = (ASK_HOURS[1] - ASK_HOURS[0]) / n
+  for (var i = 0; i < n; i++) {
+    for (var k = 0; k < 3; k++) x = (x * 48271) % 2147483647
+    out.push(ASK_HOURS[0] + span * (i + x / 2147483647))
+  }
+  return out
+}
+
+// Which of today's moments is open right now and not yet used, or -1.
+function askDue(s, b) {
+  if (b.day === undefined || b.hour === undefined) return -1
+  if (s.askDay !== b.day) {
+    s.askDay = b.day
+    s.askAt = askTimes(b.day, b.species)
+    s.askDone = []
+  }
+  for (var i = 0; i < s.askAt.length; i++)
+    if (!s.askDone[i] && b.hour >= s.askAt[i] && b.hour < s.askAt[i] + ASK_OPEN) return i
+  return -1
+}
+
+// Brings a toy unasked. The dog carries his ball to below the pointer (delivering it does the
+// rest); the cat nudges her yarn that way with a paw.
+function ask(s, b, rand) {
+  var cx = b.cursor ? b.cursor.x : (b.w + b.size) * (0.3 + 0.4 * rand())
+  if (traits(b).fetches) {
+    s.ball = { x: s.x, y: s.y, vx: 0, vy: 0, roll: 0, life: BALL_LIFE, held: false,
+               carried: true, fetched: false, home: cx }
+    s.asking = true
+    walkTo(s, Math.max(0, Math.min(b.w, cx - b.size / 2)), "carry")
+    return
+  }
+  s.dir = cx < s.x + b.size / 2 ? -1 : 1
+  s.ball = {
+    x: Math.max(0, Math.min(b.w + b.size - b.ballSize, s.x + b.size / 2 + s.dir * b.size * 0.5 - b.ballSize / 2)),
+    y: ground(b) - b.ballSize, vx: s.dir * (200 + rand() * 200), vy: -(150 + rand() * 150),
+    roll: 0, life: BALL_LIFE, held: false, carried: false, fetched: false, home: cx
+  }
+  setMode(s, "bat", 0.5)
+}
+
+// Runs a queued step: a mode for a while, or a walk to x.
+function run(s, q) {
+  if (q.x !== undefined) walkTo(s, q.x, q.mode)
+  else setMode(s, q.mode, q.duration)
+  s.then = q.then || null
+}
+
+// Walks out past the nearer screen edge. How long she stays away follows from how long she was
+// here, so the share of time away holds whatever she got up to in between.
+function leave(s, b, rand) {
+  walkTo(s, s.x < b.w / 2 ? -b.size : b.w + b.size, "leave")
+  var share = traits(b).away
+  s.awayFor = s.onFor * share / (1 - share) * (0.7 + 0.6 * rand())
+}
+
+// Walks back in, usually on the side she left by, to somewhere in the nearer third of the screen.
+function comeBack(s, b, r1, r2) {
+  var left = (s.x < b.w / 2) === (r1 < 0.7)
+  s.x = left ? -b.size : b.w + b.size
+  walkTo(s, left ? b.w * (0.05 + 0.3 * r2) : b.w * (0.95 - 0.3 * r2), "enter")
+  s.onFor = 0
+}
+
+// A toy given or picked up calls her back: she turns round, or comes in again on the side she left by.
+function callBack(s, b, rand) {
+  if (s.mode !== "leave" && s.mode !== "away") return
+  if (s.mode === "leave") setMode(s, "idle", 0.5)
+  else comeBack(s, b, 0, rand())
+  s.stay = about(STAY_MIN, rand)   // and she stays to play
 }
 
 // A mouse that moved recently, near the floor, within range.
@@ -114,19 +364,51 @@ function pounceAt(s, b) {
 
 function next(s, b, rand) {
   var m = s.mode
+  var queued = s.then
+  if (queued) return run(s, queued)
+  if (m === "walk" && s.visiting) {
+    var near = friend(b)
+    return near && Math.abs(near.x - s.x) < Math.max(b.size, b.friendSize || 0) * 1.5 ? meet(s, near, b, rand) : setMode(s, "idle", 1)
+  }
+  if (m === "leave") return setMode(s, "away", b.hide ? 3 : s.awayFor)
+  if (m === "away") {
+    if (b.hide) return setMode(s, "away", 3)   // still being shared: look again in a moment
+    // Each keeps its own hours: not back in on the other's heels.
+    if (b.friend && b.friend.mode === "enter") return setMode(s, "away", 20 + rand() * 60)
+    s.stay = STAY_MIN + rand() * STAY_SPAN
+    return comeBack(s, b, rand(), rand())
+  }
   if (m === "petted") return setMode(s, "sit", 3 + rand() * 5)
-  if (m === "walk" && s.goal !== null) {
+  if ((m === "walk" || m === "flee") && s.goal !== null) {
     var l = ledge(s, b)
     setMode(s, "climb", Infinity)
     if (l) s.clipTop = l.y
     return
   }
+  if (m === "flee") return setMode(s, "away", 6 + rand() * 8)   // strolls back in as if nothing happened
+  if (m === "greet") return setMode(s, "petted", about(2, rand))
+  if (m === "zoom") {
+    if (--s.laps > 0) return walkTo(s, s.x < b.w / 2 ? b.w * 0.95 : b.w * 0.05, "zoom")
+    return setMode(s, rand() < 0.7 ? "groom" : "sit", about(3, rand))
+  }
   if (m === "sleep") return setMode(s, "stretch", 1.5)
   if (m === "crouch") return cursorNear(s, b) ? pounceAt(s, b) : setMode(s, "idle", 1)
   if (m === "bat") return setMode(s, "idle", 0.3)
   if (m !== "idle" && m !== "sit") return setMode(s, "idle", 1 + rand() * 3)
+  var due = s.ball ? -1 : askDue(s, b)
+  if (due >= 0) {
+    s.askDone[due] = true
+    return ask(s, b, rand)
+  }
+  if (s.stay <= 0) {
+    // Nor out right behind the other: if it has just gone, hang about a little longer.
+    var o = b.friend
+    if (o && (o.mode === "leave" || (o.mode === "away" && o.t < 90))) s.stay = 30 + rand() * 120
+    else return leave(s, b, rand)
+  }
+  if (b.exhausted) return setMode(s, "sleep", 60 + rand() * 60)
   var ls = b.ledges || []
-  if (ls.length && rand() < HANG_CHANCE) {
+  if (traits(b).climbs && ls.length && rand() < HANG_CHANCE) {
     var l = ls[Math.floor(rand() * ls.length)]
     walkTo(s, l.x + rand() * (l.w - b.size))
     s.goal = l.id
@@ -137,23 +419,53 @@ function next(s, b, rand) {
   var walk = 0.25 + 0.3 * e
   var tired = (1 - e) * (1 - e)
   var sleep = 0.03 + 0.35 * tired
+  var f = friend(b)
+  var dog = b.species === "dog"
+  if (f && rand() < MEET_CHANCE * e) {
+    if (dog && e > CHASE_ENERGY && f.mode !== "sleep" && rand() < CHASE_SHARE) return chase(s, f)
+    return visit(s, f, b)
+  }
+  if (e > ZOOM_ENERGY && rand() < 0.1 * (e - ZOOM_ENERGY) / (1 - ZOOM_ENERGY)) {
+    s.laps = rand() < 0.5 ? 2 : 3
+    return walkTo(s, s.x < b.w / 2 ? b.w * 0.95 : b.w * 0.05, "zoom")
+  }
   var r = rand()
-  if (r < walk) walkTo(s, rand() * b.w)
-  else if ((r -= walk) < 0.2) setMode(s, "sit", 3 + rand() * 5)
-  else if ((r -= 0.2) < 0.12) setMode(s, "groom", 3 + rand() * 3)
-  else if ((r -= 0.12) < 0.08) setMode(s, "yawn", 1.5)
-  else if ((r -= 0.08) < sleep) setMode(s, "sleep", (20 + rand() * 40) * (0.5 + 2 * tired))
-  else setMode(s, "idle", 1 + rand() * 3)
+  // Sitting, grooming and yawning take 0.4 of the decisions for either species. A dog spends
+  // part of that barking and chasing his tail instead, the more the livelier he is, so the
+  // walk and sleep shares, and with them the energy slider and day cycle, work the same for both.
+  // Music playing doubles the tail-chasing.
+  var antics = dog ? 0.05 * e : 0
+  var spin = antics * (b.music ? 2 : 1)
+  var sit = dog ? 0.26 - antics - spin : 0.2
+  var groom = dog ? 0.08 : 0.12
+  var yawn = dog ? 0.06 : 0.08
+  if (r < walk) walkTo(s, rand() * b.w, dog && rand() < 0.4 ? "sniff" : "walk")
+  else if ((r -= walk) < sit) setMode(s, "sit", 3 + rand() * 5)
+  else if ((r -= sit) < groom) setMode(s, "groom", 3 + rand() * 3)
+  else if ((r -= groom) < yawn) yawnTogether(s, f, rand)
+  else if ((r -= yawn) < antics) setMode(s, "bark", 0.8 + rand() * 0.8)
+  else if ((r -= antics) < spin) setMode(s, "spin", 1.5 + rand() * 2)
+  else if ((r -= spin) < sleep) {
+    // Naps are nicer next to someone already asleep.
+    if (f && f.mode === "sleep" && rand() < 0.7) visit(s, f, b)
+    else setMode(s, "sleep", (25 + rand() * 50) * (0.5 + 2 * tired))
+  } else setMode(s, "idle", 1 + rand() * 3)
 }
 
 // Ball first, then the mouse. May switch her into run / bat / crouch.
 function distract(s, b, rand, dt) {
   if (!REACTIVE[s.mode] || s.goal !== null) return
   var o = s.ball
-  if (o) {
+  // A ball he already brought back lies there until it is thrown again.
+  if (o && !o.fetched) {
     var gap = o.x + b.ballSize / 2 - (s.x + b.size / 2)
-    var low = o.y >= b.floor + b.size - b.ballSize - b.size * 0.3
-    if (Math.abs(gap) < b.size * 0.5 && low && !o.held) {
+    var low = o.y >= ground(b) - b.ballSize - b.size * 0.3
+    if (Math.abs(gap) < b.size * 0.5 && low && !o.held && traits(b).fetches) {
+      o.carried = true
+      o.vx = o.vy = 0
+      o.life = BALL_LIFE
+      walkTo(s, Math.max(0, Math.min(b.w, o.home - b.size / 2)), "carry")
+    } else if (Math.abs(gap) < b.size * 0.5 && low && !o.held) {
       s.dir = gap < 0 ? -1 : 1
       o.vx = s.dir * (250 + rand() * 300)
       o.vy = -(150 + rand() * 350)
@@ -181,7 +493,7 @@ function watchCursor(s, b, dt) {
   if (s.bored > 0) s.bored -= dt
 }
 
-function moveBall(s, b, dt) {
+function moveBall(s, b, dt, rand) {
   var o = s.ball
   if (!o) return
   o.life -= dt
@@ -189,8 +501,20 @@ function moveBall(s, b, dt) {
     s.ball = null
     return
   }
-  if (o.held) return
-  var floor = b.floor + b.size - b.ballSize
+  if (o.carried && s.mode !== "carry") o.carried = false   // picked up, dropped, or no longer a dog
+  if (o.held) {   // in the user's hand: wherever it is let go is where a dog brings it back to
+    callBack(s, b, rand)
+    o.carried = o.fetched = false
+    o.home = o.x + b.ballSize / 2
+    return
+  }
+  if (o.carried) {
+    var k = b.size / 32
+    o.x = s.x + (s.dir > 0 ? MOUTH.x : 32 - MOUTH.x - 12) * k
+    o.y = s.y + MOUTH.y * k
+    return
+  }
+  var floor = ground(b) - b.ballSize
   var maxX = b.w + b.size - b.ballSize
   o.vy += GRAVITY * dt
   o.x += o.vx * dt
@@ -214,8 +538,21 @@ function moveBall(s, b, dt) {
 }
 
 function tick(s, dt, b, rand) {
+  s.species = b.species || "cat"
+  s.energy = b.energy === undefined ? 0.5 : b.energy
+  s.w = b.w
+  if (s.stay === null) s.stay = STAY_MIN + rand() * STAY_SPAN
+  s.petT += dt
+  if (s.grumpy > 0) s.grumpy -= dt
+  if (s.calm > 0) s.calm -= dt
+  // The clocks stand still while nobody is at the desk, or both would wake with their time up
+  // and walk off side by side.
+  if (!OFFSCREEN[s.mode] && !s.settled) {
+    s.stay -= dt
+    s.onFor += dt
+  }
   watchCursor(s, b, dt)
-  moveBall(s, b, dt)
+  moveBall(s, b, dt, rand)
   if (s.mode === "held") return s
   if (s.mode === "fall") {
     s.vy += GRAVITY * dt
@@ -242,23 +579,62 @@ function tick(s, dt, b, rand) {
         setMode(s, "sit", 2 + rand() * 3)
       }
     }
+  } else if (s.mode === "hop") {
+    s.t += dt
+    var h = Math.min(1, s.t / s.until)
+    s.y = b.floor - 4 * HOP_HEIGHT * h * (1 - h)
+    if (h >= 1) {
+      s.y = b.floor
+      next(s, b, rand)
+    }
   } else {
     s.y = b.floor
     s.t += dt
+    if (b.hide && !OFFSCREEN[s.mode]) leave(s, b, rand)   // screen is being shared: out of sight
+    // Time to bring the toy: that gets her up from a nap, or back from a wander.
+    if (!b.hide && !b.exhausted && !s.settled && !s.ball && askDue(s, b) >= 0) {
+      if (s.mode === "away") callBack(s, b, rand)
+      else if (s.mode === "sleep") setMode(s, "stretch", 1.5)
+    }
+    if (s.mode === "flee" && s.pending) planFlee(s, b, rand)
+    if (s.mode === "chase") {
+      var q = b.friend
+      if (q && q.mode === "flee") {
+        s.dir = q.x < s.x ? -1 : 1
+        s.targetX = Math.max(0, Math.min(b.w, q.x))
+      } else {   // she got away: bark after her, then sniff off
+        setMode(s, "bark", about(2.5, rand))
+        s.then = { mode: "sniff", x: Math.max(0, Math.min(b.w, s.x - s.dir * (150 + rand() * 300))) }
+      }
+    }
+    if (s.mode === "sleep") {
+      // One dream per long nap: a thought bubble with the toy, or the other pet, for a few seconds.
+      if (s.dreamAt === null) s.dreamAt = s.until > 30 ? 8 + rand() * (Math.min(s.until, 150) - 14) : Infinity
+      if (s.dream && (s.dream.left -= dt) <= 0) s.dream = null
+      if (s.t >= s.dreamAt) {
+        s.dream = { what: b.friend && rand() < 0.3 ? "friend" : "toy", left: about(5, rand) }
+        s.dreamAt = Infinity
+      }
+    }
     distract(s, b, rand, dt)
-    if (s.mode === "walk" || s.mode === "run") {
-      s.x += s.dir * (s.mode === "run" ? RUN_SPEED : SPEED) * dt
+    if (s.mode === "carry" && !(s.ball && s.ball.carried)) setMode(s, "idle", 0.5)   // lost the ball on the way
+    if (PACE[s.mode]) {
+      // Getting out of a shared screen is done at a run.
+      s.x += s.dir * (s.mode === "leave" && b.hide ? RUN_SPEED : PACE[s.mode]) * dt
       if ((s.targetX - s.x) * s.dir <= 0) {
         s.x = s.targetX   // no overshoot: a hang spot must stay inside its window
-        if (s.mode === "walk") s.t = s.until = 0
+        if (ARRIVES[s.mode]) s.t = s.until = 0
+        else if (s.mode === "carry") deliver(s, rand)
       }
+    } else if (s.mode === "spin") {
+      s.dir = Math.floor(s.t / SPIN_FLIP) % 2 ? -1 : 1
     } else if (s.mode === "crouch") {
       if (!cursorNear(s, b)) setMode(s, "idle", 1)   // the mouse got away
       else s.dir = b.cursor.x < s.x + b.size / 2 ? -1 : 1
     }
     if (s.t >= s.until) next(s, b, rand)
   }
-  s.x = Math.max(0, Math.min(b.w, s.x))
+  if (!OFFSCREEN[s.mode]) s.x = Math.max(0, Math.min(b.w, s.x))
   return s
 }
 
@@ -302,9 +678,110 @@ function climbStep(s, b, l, dt, rand) {
   }
 }
 
-function pet(s) {
-  if (s.mode === "peekup" || s.mode === "peek") setMode(s, "peekdown", Infinity)   // ducks
-  else if (!ON_LEDGE[s.mode] && s.mode !== "held" && s.mode !== "fall") setMode(s, "petted", 1.5)
+// Drops the ball at his feet, play-bows and barks for a throw. A ball he brought unasked and that
+// nobody throws, he lies down next to.
+function deliver(s, rand) {
+  var o = s.ball
+  o.carried = false
+  o.fetched = true
+  o.vx = s.dir * 60
+  o.vy = -120
+  var wait = s.asking ? { mode: "sit", duration: about(8, rand), then: { mode: "sleep", duration: about(25, rand) } } : null
+  s.asking = false
+  // Mostly a bow and a bark; sometimes just one of the two.
+  var r = rand()
+  var bark = { mode: "bark", duration: about(0.8, rand), then: wait }
+  if (r < 0.2) return run(s, bark)
+  setMode(s, "invite", about(1, rand))
+  s.then = r < 0.8 ? bark : wait
+}
+
+// A click on her. A cat enjoys a few pets in a row, then swats the pointer, walks off and for a
+// while only flicks her tail at a click. A dog never has enough and rolls over for a belly rub.
+// How many pets that takes is drawn anew for every streak.
+function pet(s, rand) {
+  rand = rand || Math.random
+  if (s.mode === "peekup" || s.mode === "peek") return setMode(s, "peekdown", Infinity)   // ducks
+  if (ON_LEDGE[s.mode] || s.mode === "held" || s.mode === "fall" || s.mode === "away") return
+  var dog = s.species === "dog"
+  if (s.petT >= PET_WINDOW || s.patience === null) {
+    s.pets = 0
+    s.patience = dog ? DOG_BELLY + Math.floor(rand() * 3) - 1
+      : CAT_PATIENCE + Math.floor(rand() * 3) + (s.energy < 0.3 ? 2 : 0)
+  }
+  s.pets++
+  s.petT = 0
+  if (dog) {
+    if (s.pets >= s.patience) {
+      s.patience = null
+      return setMode(s, "belly", about(4, rand))
+    }
+  } else {
+    if (s.grumpy > 0) return setMode(s, "sit", 1)
+    if (s.pets > s.patience) {
+      s.patience = null
+      s.grumpy = about(20, rand)
+      setMode(s, "bat", 0.6)
+      s.then = { mode: "walk", x: Math.max(0, Math.min(s.w, s.x + (s.x > s.w / 2 ? -1 : 1) * about(250, rand))) }
+      return
+    }
+  }
+  setMode(s, "petted", about(1.5, rand))
+}
+
+// A window opened or closed right where she is. The cat hops and scurries a few steps off;
+// the dog barks at it. More likely the livelier she is, and not again for a few minutes.
+function startle(s, b, rand) {
+  if (!REACTIVE[s.mode] || s.goal !== null || s.calm > 0 || rand() > 0.2 + 0.6 * s.energy) return
+  s.calm = CALM + rand() * CALM
+  // Mostly the dog barks and the cat hops and scurries off; now and then he jumps and she just hops.
+  var hops = traits(b).fetches ? rand() < 0.3 : true
+  if (!hops) return setMode(s, "bark", about(1.5, rand))
+  var x = s.x + (rand() < 0.5 ? -1 : 1) * (150 + rand() * 150)
+  setMode(s, "hop", 0.35)
+  if (traits(b).fetches) s.then = { mode: "bark", duration: about(1, rand) }
+  else if (rand() < 0.75) s.then = { mode: "scurry", x: Math.max(0, Math.min(b.w, x)) }
+}
+
+// Nobody at the desk: nap right here until someone is back.
+function settle(s) {
+  if (OFFSCREEN[s.mode] || ON_LEDGE[s.mode] || s.mode === "held" || s.mode === "fall") return
+  s.settled = true
+  if (s.mode === "sleep") s.until = Infinity
+  else setMode(s, "sleep", Infinity)
+}
+
+// Someone is back. The dog runs to the pointer and gets his hearts; the cat stretches and yawns.
+// A sleepy pet just stretches and sleeps on. One that was away comes back in.
+function welcome(s, b, rand, cursorX) {
+  if (s.mode === "away") {
+    s.stay = STAY_MIN + rand() * STAY_SPAN
+    return comeBack(s, b, 0, rand())
+  }
+  if (!s.settled) return
+  s.settled = false
+  if (s.mode !== "sleep") return
+  var x = cursorX === null || cursorX === undefined ? b.w / 2 : cursorX - b.size / 2
+  x = Math.max(0, Math.min(b.w, x))
+  // Usually the dog comes running and the cat takes her time; some days it is the other way round.
+  var comes = rand() < (traits(b).fetches ? 0.8 : 0.2)
+  if (s.energy < 0.25) {
+    setMode(s, "stretch", 1.5)
+    s.then = { mode: "sleep", duration: 60 + rand() * 120 }
+  } else if (comes && traits(b).fetches) {
+    walkTo(s, x, "greet")
+  } else {
+    setMode(s, "stretch", 1.5)
+    s.then = comes ? { mode: "walk", x: x, then: { mode: "sit", duration: about(4, rand) } }
+      : { mode: rand() < 0.6 ? "yawn" : "groom", duration: rand() < 0.6 ? 1.5 : about(3, rand) }
+  }
+}
+
+// The charger is back in: wake up. The dog with a hop, the cat with a stretch.
+function wake(s, b) {
+  if (s.mode !== "sleep") return
+  if (traits(b).fetches) setMode(s, "hop", 0.35)
+  else setMode(s, "stretch", 1.5)
 }
 
 function grab(s) {
@@ -317,12 +794,18 @@ function drop(s) {
 }
 
 // Drops a yarn ball just in front of her (replacing any existing one).
-function spawnBall(s, b) {
+// For a fetcher it is thrown from where he stands, towards the roomier side of the screen.
+function spawnBall(s, b, rand) {
+  rand = rand || Math.random
+  callBack(s, b, rand)
+  var far = traits(b).fetches
+  if (far) s.dir = s.x < b.w / 2 ? 1 : -1
   var x = s.x + b.size / 2 + s.dir * b.size * 0.8 - b.ballSize / 2
   s.ball = {
     x: Math.max(0, Math.min(b.w + b.size - b.ballSize, x)),
-    y: b.floor + b.size - b.ballSize - 150,
-    vx: s.dir * 80, vy: 0, roll: 0, life: BALL_LIFE, held: false
+    y: ground(b) - b.ballSize - 150,
+    vx: s.dir * (far ? 520 : 80), vy: far ? -350 : 0, roll: 0, life: BALL_LIFE, held: false,
+    carried: false, fetched: false, home: s.x + b.size / 2
   }
 }
 
@@ -336,13 +819,17 @@ function yarnFrame(o, ballSize) {
 var DAY_CURVE = [[0, 0.05], [5, 0.05], [7, 0.25], [9, 0.9], [12, 0.75], [14, 0.55], [17, 0.6],
                  [19, 0.4], [21, 0.2], [23, 0.07], [24, 0.05]]
 
-function timeEnergy(hour) {
-  var h = ((hour % 24) + 24) % 24
-  for (var i = 1; i < DAY_CURVE.length; i++) {
-    var a = DAY_CURVE[i - 1], z = DAY_CURVE[i]
-    if (h <= z[0]) return a[1] + (z[1] - a[1]) * (h - a[0]) / (z[0] - a[0])
+// Reads a curve of [x, y] points at x, straight lines in between.
+function along(curve, x) {
+  for (var i = 1; i < curve.length; i++) {
+    var a = curve[i - 1], z = curve[i]
+    if (x <= z[0]) return a[1] + (z[1] - a[1]) * (x - a[0]) / (z[0] - a[0])
   }
-  return DAY_CURVE[0][1]
+  return curve[curve.length - 1][1]
+}
+
+function timeEnergy(hour) {
+  return along(DAY_CURVE, ((hour % 24) + 24) % 24)
 }
 
 // The energy slider is her personality; the time of day moves her around it.

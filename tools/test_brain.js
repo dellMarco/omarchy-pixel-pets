@@ -7,19 +7,21 @@ vm.runInNewContext(src, B)
 
 let seed = 42
 const rand = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296
-const bounds = { w: 1824, floor: 984 }
+const bounds = { w: 1824, floor: 984, size: 96, ballSize: 36 }
 const s = B.create(100, bounds.floor)
 const seen = new Set()
 
-for (let i = 0; i < 30 * 60 * 30; i++) { // 30 simulated minutes
+for (let i = 0; i < 30 * 60 * 90; i++) { // 90 simulated minutes
   B.tick(s, 1 / 30, bounds, rand)
   seen.add(s.mode)
-  assert(s.x >= 0 && s.x <= bounds.w, "x out of bounds: " + s.x)
+  assert(B.OFFSCREEN[s.mode] || (s.x >= 0 && s.x <= bounds.w), "x out of bounds: " + s.x)
   assert.strictEqual(s.y, bounds.floor)
   assert(B.ANIMS[s.mode], "no animation for mode " + s.mode)
 }
 for (const m of ["idle", "walk", "sit", "sleep", "groom", "yawn", "stretch"]) assert(seen.has(m), "never entered " + m)
 
+// Wherever the simulation left her (maybe off screen), carry on from the floor, and keep her here.
+s.mode = "idle"; s.x = 100; s.y = bounds.floor; s.goal = null; s.stay = 1e9
 B.pet(s)
 assert.strictEqual(s.mode, "petted")
 B.grab(s); s.x = -500; s.y = 100
@@ -117,16 +119,18 @@ assert.strictEqual(k.ball, null, "ball should go away after a while")
 assert.notStrictEqual(k.mode, "run", "stops chasing once the ball is gone")
 
 // Energy: a lazy cat sleeps more than a playful one
-function sleepShare(energy) {
-  const eb = { w: 1824, floor: 984, size: 96, peek: 30, ledges: [], ballSize: 36, cursor: null, energy }
+// Share of the time on screen spent asleep.
+function sleepShare(energy, species = "cat") {
+  const eb = { w: 1824, floor: 984, size: 96, peek: 30, ledges: [], ballSize: 36, cursor: null, energy, species }
   const e = B.create(500, eb.floor)
-  let asleep = 0
-  const ticks = 30 * 60 * 60
-  for (let i = 0; i < ticks; i++) {
+  let asleep = 0, here = 0
+  for (let i = 0; i < 30 * 60 * 60 * 4; i++) {
     B.tick(e, 1 / 30, eb, rand)
+    if (B.OFFSCREEN[e.mode]) continue
+    here++
     if (e.mode === "sleep") asleep++
   }
-  return asleep / ticks
+  return asleep / here
 }
 const lazy = sleepShare(0), playful = sleepShare(1)
 assert(lazy > playful * 2, `lazy cat should sleep much more: lazy ${lazy.toFixed(2)} playful ${playful.toFixed(2)}`)
@@ -147,4 +151,345 @@ const night = sleepShare(B.effectiveEnergy(0.5, 2)), morning = sleepShare(B.effe
 assert(night > 0.5, "should sleep most of the night, slept " + night.toFixed(2))
 assert(night > morning * 3, `sleeps far more at night: night ${night.toFixed(2)} morning ${morning.toFixed(2)}`)
 
+
+// ---------- Dog: stays on the ground, fetches, has his own idle habits ----------
+{
+  const d = B.create(400, bounds.floor)
+  const db = { w: 1824, floor: 984, size: 96, peek: 30, ballSize: 36, ledges: [win], species: "dog", energy: 0.8 }
+  const modes = new Set()
+  for (let i = 0; i < 30 * 60 * 60; i++) {
+    B.tick(d, 1 / 30, db, rand)
+    modes.add(d.mode)
+    assert(B.ANIMS[d.mode], "no animation for mode " + d.mode)
+    assert(!B.ON_LEDGE[d.mode], "a dog never climbs")
+    assert.strictEqual(d.y, db.floor)
+  }
+  for (const m of ["sniff", "bark", "spin", "walk", "sleep"]) assert(modes.has(m), "dog never entered " + m)
+  assert(!modes.has("bat"), "a dog fetches instead of batting")
+
+  // Fetch: thrown from where he stands, carried back there, dropped, then left alone.
+  d.x = 300; B.grab(d); B.drop(d)
+  for (let i = 0; i < 90 && d.mode === "fall"; i++) B.tick(d, 1 / 30, db, rand)
+  B.spawnBall(d, db)
+  const home = d.ball.home
+  assert.strictEqual(home, 300 + db.size / 2)
+  let far = 0, carried = false
+  for (let i = 0; i < 30 * 30 && !(d.ball && d.ball.fetched); i++) {
+    B.tick(d, 1 / 30, db, rand)
+    assert(d.ball, "the ball must outlive the fetch")
+    far = Math.max(far, Math.abs(d.ball.x - home))
+    if (d.mode === "carry") {
+      carried = true
+      assert(d.ball.carried && Math.abs(d.ball.x - d.x) < db.size, "the ball rides in his mouth")
+    }
+  }
+  assert(far > 300, "the ball should fly well away, got " + far)
+  assert(carried && d.ball.fetched, "he brings it back")
+  assert(d.mode === "invite" || d.mode === "bark", "and bows or barks for another throw, not " + d.mode)
+  assert(Math.abs(d.x + db.size / 2 - home) < 2, "back where it was thrown from")
+  for (let i = 0; i < 30 * 10; i++) {
+    B.tick(d, 1 / 30, db, rand)
+    assert(d.mode !== "run" && d.mode !== "carry", "a fetched ball is left alone")
+  }
+  // Picking the ball up makes it fair game again, and taking it from his mouth stops the carry.
+  d.ball.held = true; d.ball.x = 1200; d.ball.y = db.floor
+  B.tick(d, 1 / 30, db, rand)
+  d.ball.held = false
+  for (let i = 0; i < 30 * 30 && d.mode !== "carry"; i++) B.tick(d, 1 / 30, db, rand)
+  assert.strictEqual(d.mode, "carry", "fetches a ball that was thrown by hand")
+  d.ball.held = true
+  B.tick(d, 1 / 30, db, rand)
+  assert(d.mode !== "carry" && !d.ball.carried, "lets go when the ball is taken")
+}
+// ---------- Dog follows the energy setting like the cat does ----------
+{
+  const share = (species, energy) => {
+    const p = B.create(400, bounds.floor), t = {}
+    const pb = { w: 1824, floor: 984, size: 96, ballSize: 36, ledges: [], species, energy }
+    const n = 30 * 60 * 120
+    let here = 0
+    for (let i = 0; i < n; i++) {
+      B.tick(p, 1 / 30, pb, rand)
+      if (B.OFFSCREEN[p.mode]) continue
+      here++
+      t[p.mode] = (t[p.mode] || 0) + 1
+    }
+    for (const m in t) t[m] /= here   // shares of the time on screen
+    return t
+  }
+  const lazy = share("dog", 0.1), lively = share("dog", 0.9)
+  assert(lazy.sleep > 0.6 && lazy.sleep > 3 * lively.sleep, "a lazy dog mostly sleeps: " + lazy.sleep + " vs " + lively.sleep)
+  const cat = share("cat", 0.1)
+  assert(Math.abs(lazy.sleep - cat.sleep) < 0.15, "as much as a lazy cat: " + lazy.sleep + " vs " + cat.sleep)
+  const antics = t => (t.bark || 0) + (t.spin || 0)
+  assert(antics(lively) > 3 * antics(lazy), "barking and tail-chasing follow the slider")
+}
+
+// ---------- Cat and dog out together ----------
+{
+  // The dog is a size up, so the two rest at different heights.
+  const ground = 1079, floors = { cat: 989, dog: 959 }, sizes = { cat: 96, dog: 128 }
+  const cat = B.create(600, floors.cat), dog = B.create(1200, floors.dog)
+  const pb = (species, friend, energy) => ({
+    w: 1920 - sizes[species], floor: floors[species], ground, size: sizes[species], ballSize: sizes[species] * 0.375,
+    ledges: [], species, friend, friendSize: sizes[species === "cat" ? "dog" : "cat"], energy
+  })
+  const run = (energy, minutes) => {
+    const seen = { cat: new Set(), dog: new Set() }
+    let together = 0, naps = 0
+    for (let i = 0; i < 30 * 60 * minutes; i++) {
+      B.tick(cat, 1 / 30, pb("cat", dog, energy), rand)
+      B.tick(dog, 1 / 30, pb("dog", cat, energy), rand)
+      for (const [k, p] of [["cat", cat], ["dog", dog]]) {
+        seen[k].add(p.mode)
+        assert(B.ANIMS[p.mode], "no animation for mode " + p.mode)
+        assert.strictEqual(p.y, floors[k], k + " left the floor")
+      }
+      if (dog.mode === "invite" || (cat.mode === "bat" && !cat.ball)) together++
+      if (cat.mode === "sleep" && dog.mode === "sleep" && Math.abs(cat.x - dog.x) < 128) naps++
+    }
+    return { seen, together: together / 30, naps }
+  }
+  const lively = run(0.9, 120)
+  assert(lively.seen.dog.has("invite"), "the dog asks the cat to play")
+  assert(lively.seen.cat.has("bat"), "the cat taps the dog")
+  assert(!lively.seen.cat.has("invite") && !lively.seen.dog.has("bat"), "each keeps to its own moves")
+  assert(lively.together < 120 * 60 * 0.05, "playing stays occasional: " + lively.together + "s in two hours")
+  const lazy = run(0.1, 120)
+  assert(lazy.together < lively.together, "a lazy pair plays less")
+  assert(lazy.naps > 0, "a lazy pair naps side by side now and then")
+
+  // The yarn rests on the ground line, not on the pet's floor.
+  B.spawnBall(cat, pb("cat", null, 0.5))
+  for (let i = 0; i < 30 * 5; i++) B.tick(cat, 1 / 30, pb("cat", null, 0.5), rand)
+  assert(cat.ball.y <= ground - 36 && cat.ball.y > ground - 36 - 96, "ball near the ground line: " + cat.ball.y)
+}
+// ---------- Wandering off: the cat for about half the time, the dog for 20% ----------
+for (const species of ["cat", "dog"]) {
+  const p = B.create(400, bounds.floor)
+  const pb = { w: 1824, floor: 984, size: 96, ballSize: 36, ledges: [], species, energy: 0.5 }
+  const n = 30 * 60 * 60 * 12
+  let away = 0, trips = 0, was = "idle"
+  for (let i = 0; i < n; i++) {
+    B.tick(p, 1 / 30, pb, rand)
+    if (p.mode === "away") {
+      away++
+      assert(p.x <= -pb.size || p.x >= pb.w + pb.size, "away means fully past the edge: " + p.x)
+      if (was !== "away") trips++
+    } else if (!B.OFFSCREEN[p.mode]) assert(p.x >= 0 && p.x <= pb.w, p.mode + " off screen at " + p.x)
+    was = p.mode
+  }
+  const want = species === "cat" ? 0.5 : 0.2   // the cat roams far more
+  assert(Math.abs(away / n - want) < 0.07, species + " away share " + (away / n).toFixed(2))
+  assert(trips > 20, "in many short trips, not a few long ones: " + trips)
+}
+{
+  // A toy calls her back.
+  const p = B.create(400, bounds.floor)
+  const pb = { w: 1824, floor: 984, size: 96, ballSize: 36, ledges: [], species: "dog", energy: 0.5 }
+  for (let i = 0; i < 30 * 60 * 60 && p.mode !== "away"; i++) B.tick(p, 1 / 30, pb, rand)
+  assert.strictEqual(p.mode, "away")
+  B.spawnBall(p, pb)
+  assert.strictEqual(p.mode, "enter")
+  for (let i = 0; i < 30 * 60 && !(p.ball && p.ball.fetched); i++) B.tick(p, 1 / 30, pb, rand)
+  assert(p.ball && p.ball.fetched && p.x >= 0 && p.x <= pb.w, "comes back in and fetches it")
+}
+// ---------- Gimmicks ----------
+{
+  const ground = 1079, floors = { cat: 989, dog: 959 }, sizes = { cat: 96, dog: 128 }
+  const mk = (extra = {}) => {
+    const cat = B.create(600, floors.cat), dog = B.create(1200, floors.dog)
+    const pb = (species, energy = 0.9) => Object.assign({
+      w: 1920 - sizes[species], floor: floors[species], ground, size: sizes[species], ballSize: sizes[species] * 0.375,
+      ledges: [], species, friend: species === "cat" ? dog : cat, friendSize: sizes[species === "cat" ? "dog" : "cat"], energy
+    }, extra)
+    const step = (n, energy) => { for (let i = 0; i < n; i++) { B.tick(cat, 1 / 30, pb("cat", energy), rand); B.tick(dog, 1 / 30, pb("dog", energy), rand) } }
+    return { cat, dog, pb, step }
+  }
+  const settleDown = w => { for (const p of [w.cat, w.dog]) p.stay = 1e9 }
+
+  // Cuddle: the visitor lies down face to face with the sleeper, heads just overlapping.
+  for (const [sleeper, visitor, dir] of [["cat", "dog", 1], ["cat", "dog", -1], ["dog", "cat", 1], ["dog", "cat", -1]]) {
+    const w = mk(); w.step(1); settleDown(w)
+    const zs = w[sleeper], v = w[visitor]
+    zs.x = 900; zs.dir = dir; zs.mode = "sleep"; zs.t = 0; zs.until = 200
+    v.x = dir > 0 ? 300 : 1500; v.mode = "idle"
+    B.visit(v, zs, w.pb(visitor))
+    for (let i = 0; i < 30 * 40 && v.mode !== "sleep"; i++) w.step(1)
+    assert.strictEqual(v.mode, "sleep", visitor + " lies down next to the sleeping " + sleeper)
+    assert.strictEqual(v.dir, -zs.dir, "face to face")
+    const head = (p, k) => p.dir > 0 ? [p.x + 15 * k, p.x + 29 * k] : [p.x + 3 * k, p.x + 17 * k]
+    const a = head(zs, sizes[sleeper] / 32), c = head(v, sizes[visitor] / 32)
+    const overlap = Math.min(a[1], c[1]) - Math.max(a[0], c[0])
+    assert(overlap > 0 && overlap <= 16, "heads overlap a little: " + overlap)
+  }
+
+  // The chase: she bolts off screen (no windows to climb), he barks after her and sniffs off.
+  {
+    const w = mk(); w.step(1); settleDown(w)
+    w.cat.mode = w.dog.mode = "idle"
+    B.chase(w.dog, w.cat)
+    const seen = new Set()
+    for (let i = 0; i < 30 * 40; i++) { w.step(1); seen.add(w.cat.mode); seen.add("dog:" + w.dog.mode) }
+    for (const m of ["flee", "away", "enter", "dog:chase", "dog:bark", "dog:sniff"]) assert(seen.has(m), "chase never showed " + m)
+  }
+  // With a window to climb she goes up it and peeks.
+  {
+    const w = mk({ ledges: [{ id: "0x1", x: 200, y: 40, w: 700 }], peek: 30 }); w.step(1); settleDown(w)
+    w.cat.mode = w.dog.mode = "idle"
+    B.chase(w.dog, w.cat)
+    const seen = new Set()
+    for (let i = 0; i < 30 * 30; i++) { w.step(1); seen.add(w.cat.mode); assert(!B.ON_LEDGE[w.dog.mode], "the dog stays down") }
+    assert(seen.has("climb") && seen.has("peek"), "the cat escapes up the window")
+  }
+
+  // Petting has a limit, drawn anew for every streak.
+  {
+    const w = mk(); w.step(1); settleDown(w)
+    const lo = () => 0
+    w.cat.mode = "sit"
+    for (let i = 0; i < 3; i++) { B.pet(w.cat, lo); assert.strictEqual(w.cat.mode, "petted"); w.step(10) }
+    B.pet(w.cat, lo)
+    assert.strictEqual(w.cat.mode, "bat", "one pet too many gets a swat")
+    w.step(30 * 2); assert.strictEqual(w.cat.mode, "walk", "and she walks off")
+    B.pet(w.cat, lo); assert.strictEqual(w.cat.mode, "sit", "sulking: only a tail flick")
+    w.dog.mode = "sit"
+    for (let i = 0; i < 3; i++) { B.pet(w.dog, lo); assert.strictEqual(w.dog.mode, "petted"); w.step(10) }
+    B.pet(w.dog, lo); assert.strictEqual(w.dog.mode, "belly", "enough quick pets and he rolls over")
+    const limits = new Set()
+    for (let i = 0; i < 40; i++) {
+      const c = B.create(600, floors.cat); c.w = 1824; let n = 0
+      while (c.mode !== "bat") { B.pet(c, rand); n++ }
+      limits.add(n)
+    }
+    assert(limits.size >= 3, "her patience differs from streak to streak: " + [...limits])
+  }
+
+  // Welcome back.
+  {
+    const w = mk(); w.step(1); settleDown(w)
+    B.settle(w.cat); B.settle(w.dog); w.step(30 * 60)
+    assert(w.cat.mode === "sleep" && w.dog.mode === "sleep", "both nap while nobody is there")
+    const usual = () => 0.5
+    B.welcome(w.cat, w.pb("cat"), usual, 400); B.welcome(w.dog, w.pb("dog"), usual, 400)
+    assert.strictEqual(w.cat.mode, "stretch"); assert.strictEqual(w.dog.mode, "greet")
+    for (let i = 0; i < 30 * 20 && w.dog.mode === "greet"; i++) w.step(1)
+    assert.strictEqual(w.dog.mode, "petted", "hearts at the pointer")
+    assert(Math.abs(w.dog.x + 64 - 400) < 3, "he ran to the pointer")
+    const lazy = mk(); lazy.step(1, 0.1); settleDown(lazy)
+    B.settle(lazy.dog); B.welcome(lazy.dog, lazy.pb("dog", 0.1), rand, 400)
+    lazy.step(30 * 3, 0.1); assert.strictEqual(lazy.dog.mode, "sleep", "a sleepy dog stretches and sleeps on")
+  }
+
+  // Camera shy: out of sight while the screen is shared, back afterwards.
+  {
+    const w = mk({ hide: true }); settleDown(w)
+    w.step(30 * 20)
+    assert(w.cat.mode === "away" && w.dog.mode === "away", "both gone within seconds: " + w.cat.mode + " " + w.dog.mode)
+    w.step(30 * 60); assert(w.cat.mode === "away" && w.dog.mode === "away", "and they stay gone")
+    const back = mk(); back.cat.mode = back.dog.mode = "away"; back.cat.x = -96; back.dog.x = 1920
+    back.cat.until = back.dog.until = 3; back.step(30 * 150)   // one after the other, not as a pair
+    assert(!B.OFFSCREEN[back.cat.mode] && !B.OFFSCREEN[back.dog.mode], "back once it stops")
+  }
+
+  // Low battery: everyone sleeps; the charger wakes them.
+  {
+    const w = mk({ exhausted: true }); w.step(1); settleDown(w)
+    w.step(30 * 30)
+    let asleep = 0
+    for (let i = 0; i < 30 * 60 * 10; i++) { w.step(1); if (w.cat.mode === "sleep") asleep++; if (w.dog.mode === "sleep") asleep++ }
+    assert(asleep / (2 * 30 * 60 * 10) > 0.85, "asleep on an empty battery, bar the odd stretch: " + asleep)
+    w.cat.mode = w.dog.mode = "sleep"
+    B.wake(w.cat, w.pb("cat")); B.wake(w.dog, w.pb("dog"))
+    assert.strictEqual(w.cat.mode, "stretch"); assert.strictEqual(w.dog.mode, "hop")
+    w.step(30); assert.strictEqual(w.dog.y, floors.dog, "the hop lands")
+  }
+
+  // Startled, dreams, zoomies, asking to play, yawning together: all show up over a lively day,
+  // and none of the self-started ones at the lazy end.
+  const day = (energy, hours) => {
+    const w = mk(); const seen = new Set(); let dreams = 0
+    for (let i = 0; i < 30 * 3600 * hours; i++) {
+      w.step(1, energy)
+      seen.add(w.cat.mode); seen.add("dog:" + w.dog.mode)
+      if (w.cat.dream || w.dog.dream) dreams++
+      for (const p of [w.cat, w.dog]) assert(B.ANIMS[p.mode], "no animation for mode " + p.mode)
+    }
+    return { seen, dreams }
+  }
+  const lively = day(0.9, 8), lazy = day(0.05, 8)
+  for (const m of ["zoom", "dog:zoom", "dog:chase", "flee"]) assert(lively.seen.has(m), "a lively day never showed " + m)
+  for (const m of ["zoom", "dog:zoom", "dog:chase", "flee"]) assert(!lazy.seen.has(m), "a lazy day showed " + m)
+  assert(lazy.dreams > 0, "long naps bring dreams")
+  {
+    const w = mk(); w.step(1); settleDown(w)
+    w.cat.mode = w.dog.mode = "idle"; w.cat.calm = w.dog.calm = 0
+    const always = () => 0.5
+    B.startle(w.cat, w.pb("cat"), always); B.startle(w.dog, w.pb("dog"), always)
+    assert.strictEqual(w.cat.mode, "hop"); assert.strictEqual(w.dog.mode, "bark")
+    w.step(20); assert.strictEqual(w.cat.mode, "scurry", "hop, then scurry off")
+    w.cat.mode = "idle"; B.startle(w.cat, w.pb("cat"), always)
+    assert.strictEqual(w.cat.mode, "idle", "not twice within minutes")
+  }
+}
+// ---------- Each keeps its own hours: no walking off or back in as a pair ----------
+{
+  const floors = { cat: 989, dog: 959 }, sizes = { cat: 96, dog: 128 }
+  const cat = B.create(600, floors.cat), dog = B.create(1200, floors.dog)
+  const pb = species => ({
+    w: 1920 - sizes[species], floor: floors[species], ground: 1079, size: sizes[species], ballSize: 36, ledges: [],
+    species, friend: species === "cat" ? dog : cat, friendSize: sizes[species === "cat" ? "dog" : "cat"], energy: 0.3
+  })
+  const out = { cat: [], dog: [] }, back = { cat: [], dog: [] }, was = { cat: "", dog: "" }
+  for (let i = 1; i < 30 * 3600 * 24; i++) {
+    // Away from the desk for four minutes, every quarter of an hour.
+    if (i % (30 * 900) === 0) { B.settle(cat); B.settle(dog) }
+    if (i % (30 * 900) === 30 * 240) { B.welcome(cat, pb("cat"), rand, 500); B.welcome(dog, pb("dog"), rand, 500) }
+    B.tick(cat, 1 / 30, pb("cat"), rand); B.tick(dog, 1 / 30, pb("dog"), rand)
+    for (const [k, p] of [["cat", cat], ["dog", dog]]) {
+      if (p.mode === "leave" && was[k] !== "leave") out[k].push(i / 30)
+      if (p.mode === "enter" && was[k] !== "enter") back[k].push(i / 30)
+      was[k] = p.mode
+    }
+  }
+  const paired = t => t.cat.filter(a => t.dog.some(b => Math.abs(a - b) < 30)).length
+  assert(out.cat.length > 40 && out.dog.length > 40, "both still go out regularly")
+  assert(paired(out) <= 2, "left together " + paired(out) + " times of " + out.cat.length)
+  assert(paired(back) <= out.cat.length * 0.15, "came back together " + paired(back) + " times of " + back.cat.length)
+}
+// ---------- Bringing the toy unasked: the dog four times a day, the cat once, at random moments ----------
+{
+  const times = (day, species) => B.askTimes(day, species)
+  for (let day = 739000; day < 739030; day++) {
+    const d = times(day, "dog"), c = times(day, "cat")
+    assert(d.length === 4 && c.length === 1)
+    for (const t of d.concat(c)) assert(t >= 9 && t <= 21, "outside the day: " + t)
+    for (let i = 1; i < 4; i++) assert(d[i] > d[i - 1], "spread over the day")
+    assert.strictEqual(String(times(day, "dog")), String(d), "the same all day")
+  }
+  assert.notStrictEqual(String(times(739000, "dog")), String(times(739001, "dog")), "different every day")
+  const firsts = new Set(Array.from({ length: 30 }, (_, i) => Math.floor(times(739000 + i, "cat")[0])))
+  assert(firsts.size >= 6, "the cat's moment moves around the day: " + [...firsts])
+
+  // A whole day, both very lazy: he still comes four times and she once.
+  const floors = { cat: 989, dog: 959 }, sizes = { cat: 96, dog: 128 }
+  const cat = B.create(600, floors.cat), dog = B.create(1200, floors.dog)
+  const count = { cat: 0, dog: 0 }, had = { cat: false, dog: false }
+  for (let i = 0; i < 30 * 3600 * 24; i++) {
+    const hour = i / 30 / 3600
+    for (const [k, p, o] of [["cat", cat, dog], ["dog", dog, cat]]) {
+      B.tick(p, 1 / 30, {
+        w: 1920 - sizes[k], floor: floors[k], ground: 1079, size: sizes[k], ballSize: 36, ledges: [], species: k,
+        friend: o, friendSize: sizes[k === "cat" ? "dog" : "cat"], energy: 0.04, day: 739000, hour
+      }, rand)
+      if (p.ball && !had[k]) {
+        count[k]++
+        assert(hour >= 9 && hour <= 21.8, k + " brought it at " + hour.toFixed(1))
+      }
+      had[k] = !!p.ball
+    }
+  }
+  assert.strictEqual(count.dog, 4, "the dog brings his ball four times")
+  assert.strictEqual(count.cat, 1, "the cat her yarn once")
+}
 console.log("brain ok")
