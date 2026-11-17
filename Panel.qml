@@ -62,8 +62,7 @@ Panel {
   readonly property string helpText: {
     var entry = helpTexts[helpKey]
     if (!entry) return "Point at a setting to read what it does here. Click a pet to pet it, drag it to pick it up, right-click the bar icon to hide or show them."
-    var hidden = helpKey.slice(-3) === "Toy" && store && !store.shown ? " Turn on Show pets first." : ""
-    return "<font color=\"" + root.bar.foreground + "\"><b>" + entry[0] + ".</b></font> " + entry[1] + hidden
+    return "<font color=\"" + root.bar.foreground + "\"><b>" + entry[0] + ".</b></font> " + entry[1]
   }
 
   // The service is created independently of the bar, so look it up when needed.

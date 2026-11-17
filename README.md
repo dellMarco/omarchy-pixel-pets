@@ -2,8 +2,9 @@
 
 ![Pixel Pets](preview.png)
 
-A pixel-art cat that lives on your [Omarchy](https://omarchy.org) desktop. She walks along the bottom of the
-screen, sits, naps, and stays out of your way: clicks next to her go straight through to your windows.
+A pixel-art cat, a dog, or both, living on your [Omarchy](https://omarchy.org) desktop. They walk along the
+bottom of the screen, sit, nap, and stay out of your way: clicks next to them go straight through to your
+windows. What follows describes the cat; the dog and the two together come further down.
 
 - **Click** her to pet her.
 - **Drag** her to pick her up, let go to drop her.
@@ -44,8 +45,9 @@ the cat for about half the time, the dog for about 20%. Giving or picking up its
 How often the self-started ones happen follows the energy slider and the time of day.
 
 - **Cuddling:** a pet joining a sleeper lies down face to face with it, heads just touching.
-- **The chase:** a lively dog sometimes chases the cat. She escapes up a window and peeks down (if
-  "Peek over windows" is on), or bolts off the screen edge and strolls back in; he barks after her.
+- **The chase:** a lively dog sometimes chases the cat. She escapes up a window and stays on top of it or
+  peeks down from behind it (if "Climb windows" is on), or bolts off the screen edge and strolls back in;
+  he barks after her.
 - **Contagious yawn:** one yawns, the other often follows, and now and then both nap.
 - **Welcome back:** leave the desk for a few minutes and they nap. Touch the mouse and the dog runs to
   your pointer for hearts; the cat stretches and yawns. Sleepy pets just stretch and sleep on.
@@ -74,14 +76,16 @@ Remove with `omarchy plugin remove skrilexxx.pixel-pets`.
 
 ## Requirements
 
-Omarchy with its Quickshell-based shell (Hyprland). No other dependencies: the pet is plain QML and PNG
-sprites, and reads window and mouse positions from Hyprland's own IPC socket. She saves her settings to
-`~/.config/omarchy/pixel-pets.json` and doesn't touch any other config.
+Omarchy with its Quickshell-based shell (Hyprland). Nothing to install: the pets are plain QML and PNG
+sprites, and read window and mouse positions from Hyprland's own IPC socket. A few reactions use what
+the shell already offers and simply don't happen without it: media players (MPRIS) for the music,
+UPower for the battery, Wayland's idle notification for the nap while you're away. Settings are saved to
+`~/.config/omarchy/pixel-pets.json`; no other config is touched.
 
 ## Develop
 
 ```sh
-python3 tools/make_sprites.py   # redraw sprites/cat-<coat>.png (coats are in COATS)
+python3 tools/make_sprites.py   # redraw sprites/<species>-<coat>.png (coats are in CAT_COATS and DOG_COATS)
 python3 tools/make_preview.py . preview.png   # rebuild the store preview from the sprites
 node tools/test_brain.js        # behaviour self-check
 omarchy plugin validate .

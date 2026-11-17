@@ -572,24 +572,84 @@ for (const species of ["cat", "dog"]) {
   const p = B.create(600, pb.floor); p.stay = 1e9
   B.tick(p, 1 / 30, pb, rand)
   B.spawnBall(p, pb, rand)
-  const hold = (y, seconds) => { for (let i = 0; i < 30 * seconds; i++) { p.ball.held = true; p.ball.x = 900; p.ball.y = y; p.ball.life = 40; B.tick(p, 1 / 30, pb, rand) } }
+  const hold = (y, seconds) => { for (let i = 0; i < 30 * seconds; i++) { p.ball.held = true; p.ball.x = 900; p.ball.y = y; B.tick(p, 1 / 30, pb, rand) } }
   hold(700, 8)
   assert.notStrictEqual(p.mode, "zoom", species + ": held low, nothing happens")
   hold(100, 4.5)
   assert.notStrictEqual(p.mode, "zoom", species + ": not before five seconds")
   hold(100, 1)
   assert.strictEqual(p.mode, "zoom", species + ": five seconds up high and off it goes, lazy or not")
-  let zooms = 1, was = "zoom"
   for (let i = 0; i < 30 * 60; i++) {
-    p.ball.held = true; p.ball.x = 900; p.ball.y = 100; p.ball.life = 40
+    p.ball.held = true; p.ball.x = 900; p.ball.y = 100
     B.tick(p, 1 / 30, pb, rand)
-    if (p.mode === "zoom" && was !== "zoom" && p.laps === 0) zooms++
-    was = p.mode
   }
+  assert(p.ball, "a toy in the hand doesn't run out, however long it is held")
   assert(p.mode !== "zoom", "it ends")
   assert.strictEqual(p.ball.teased, true, "once per hold")
   p.ball.held = false; B.tick(p, 1 / 30, pb, rand)
   hold(100, 5.2)
   assert.strictEqual(p.mode, "zoom", species + ": letting go and holding it up again works again")
+}
+// ---------- Where features meet ----------
+{
+  const floors = { cat: 989, dog: 959 }, sizes = { cat: 96, dog: 128 }
+  const pair = () => {
+    const cat = B.create(600, floors.cat), dog = B.create(1200, floors.dog)
+    const pb = (k, extra) => Object.assign({
+      w: 1920 - sizes[k], floor: floors[k], ground: 1079, size: sizes[k], ballSize: 36, peek: 30, ledges: [], species: k,
+      friend: k === "cat" ? dog : cat, friendSize: sizes[k === "cat" ? "dog" : "cat"], energy: 0.5
+    }, extra)
+    return { cat, dog, pb }
+  }
+
+  // Joining a pet that naps because nobody is at the desk: both wake when someone is back.
+  {
+    const { cat, dog, pb } = pair()
+    B.tick(cat, 1 / 30, pb("cat"), rand); B.tick(dog, 1 / 30, pb("dog"), rand)
+    cat.stay = dog.stay = 1e9
+    B.settle(dog)
+    cat.mode = "idle"; B.visit(cat, dog, pb("cat"))
+    for (let i = 0; i < 30 * 60 && cat.mode !== "sleep"; i++) { B.tick(cat, 1 / 30, pb("cat"), rand); B.tick(dog, 1 / 30, pb("dog"), rand) }
+    assert(cat.mode === "sleep" && cat.settled, "the visitor naps on the sleeper's terms")
+    const usual = () => 0.5
+    B.welcome(cat, pb("cat"), usual, 500); B.welcome(dog, pb("dog"), usual, 500)
+    assert(cat.mode !== "sleep" && dog.mode !== "sleep", "and both wake: " + cat.mode + " " + dog.mode)
+    assert(!cat.settled && !dog.settled)
+  }
+
+  // A window hanging off the screen edge: no walking on the spot for a place she can't reach.
+  {
+    const { cat, pb } = pair()
+    const off = { ledges: [{ id: "0xoff", x: -700, y: 500, w: 760 }], friend: null }
+    let walking = 0, longest = 0
+    for (let i = 0; i < 30 * 3600 * 3; i++) {
+      B.tick(cat, 1 / 30, pb("cat", off), rand); cat.stay = 1e9
+      walking = cat.mode === "walk" ? walking + 1 : 0
+      longest = Math.max(longest, walking)
+    }
+    assert(longest / 30 < 60, "longest walk " + (longest / 30).toFixed(0) + "s")
+  }
+
+  // A screen share brings her down mid-climb.
+  {
+    const { cat, pb } = pair()
+    const win = { ledges: [{ id: "0xw", x: 300, y: 38, w: 800 }], friend: null }
+    for (let i = 0; i < 30 * 3600 * 3 && cat.mode !== "climb"; i++) { B.tick(cat, 1 / 30, pb("cat", win), rand); cat.stay = 1e9 }
+    assert.strictEqual(cat.mode, "climb")
+    B.tick(cat, 1 / 30, pb("cat", Object.assign({ hide: true }, win)), rand)
+    assert.strictEqual(cat.mode, "fall", "drops off the window to get out of sight")
+  }
+
+  // A ball brought unasked and then taken from his mouth doesn't make the next plain fetch end in a nap.
+  {
+    const { dog, pb } = pair()
+    const alone = { friend: null }
+    B.tick(dog, 1 / 30, pb("dog", alone), rand); dog.stay = 1e9
+    dog.mode = "idle"; B.ask(dog, pb("dog", alone), rand)
+    assert(dog.ball.asked && dog.mode === "carry")
+    dog.ball.held = true; B.tick(dog, 1 / 30, pb("dog", alone), rand); dog.ball = null
+    B.spawnBall(dog, pb("dog", alone), rand)
+    assert(!dog.ball.asked, "a fresh ball is a plain one")
+  }
 }
 console.log("brain ok")

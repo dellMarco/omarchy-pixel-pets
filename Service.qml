@@ -219,8 +219,12 @@ Item {
         for (var i = 0; i < tops.length; i++) {
           var o = tops[i].lastIpcObject
           if (!o || !o.at || !o.size || o.hidden || !o.workspace || o.workspace.id !== ws.id) continue
-          if (o.size[0] < catView.size || o.size[1] < catView.size * 1.5) continue   // only the cat climbs
-          out.push({ id: o.address, x: o.at[0] - mon.x, y: o.at[1] - mon.y, w: o.size[0] })
+          if (o.size[1] < catView.size * 1.5) continue
+          // Only the part of the top edge that is on this screen counts: she can't walk past the
+          // screen edge to reach the rest. Only the cat climbs, so it has to be wide enough for her.
+          var left = Math.max(0, o.at[0] - mon.x), right = Math.min(win.width, o.at[0] - mon.x + o.size[0])
+          if (right - left < catView.size) continue
+          out.push({ id: o.address, x: left, y: o.at[1] - mon.y, w: right - left })
         }
       }
       ledges = out

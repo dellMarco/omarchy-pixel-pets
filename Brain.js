@@ -6,7 +6,7 @@
 //            ground: y the ball rests on (its bottom edge); floor + size when not given,
 //            friend: the other pet's state when two are out, else null; friendSize: its sprite size,
 //            peek: how far above a window edge the sprite top sits when peeking over it,
-//            ledges: [{ id, x, y, w }] window top edges she may peek over,
+//            ledges: [{ id, x, y, w }] window top edges she may peek over or sit on,
 //            ballSize: yarn ball size,
 //            cursor: { x, y } mouse position, or null when it is not on this screen,
 //            species: "cat" | "dog",
@@ -53,7 +53,6 @@ var ANIMS = {
   leave:   { row: 1, frames: 6, fps: 10 },
   away:    { row: 0, frames: 4, fps: 3 },
   enter:   { row: 1, frames: 6, fps: 10 },
-  // Dog only. Rows 16 and up exist only on the dog sheets.
   // Short bursts: a startled hop, running off, racing about, running to greet.
   hop:     { row: 6, frames: 2, fps: 8 },
   scurry:  { row: 1, frames: 6, fps: 16 },
@@ -61,6 +60,7 @@ var ANIMS = {
   zoom:    { row: 1, frames: 6, fps: 20 },
   greet:   { row: 1, frames: 6, fps: 16 },
   chase:   { row: 1, frames: 6, fps: 16 },
+  // Dog only from here. Rows 16 and up exist only on the dog sheets.
   invite:  { row: 9, frames: 2, fps: 6 },   // play bow: at the cat, or after bringing the ball
   belly:   { row: 18, frames: 2, fps: 6 },  // on his back for a belly rub
   carry:   { row: 1, frames: 6, fps: 14 },
@@ -144,7 +144,7 @@ function create(x, y) {
     visiting: false, then: null,
     stay: null, onFor: 0,   // s left before wandering off; s on screen since she came back
     perch: null, perchY: 0, perchFor: 0, onTop: false,   // the window she is on, by id; onTop: this climb goes over the top, in full view
-    pending: false, laps: 0, asking: false, askDay: null, askAt: [], askDone: [],
+    pending: false, laps: 0, askDay: null, askAt: [], askDone: [],
     pets: 0, petT: Infinity, patience: null, grumpy: 0, calm: 0,
     dream: null, dreamAt: null, settled: false,
     // What the last tick knew, for the calls that come without bounds (pet).
@@ -261,7 +261,13 @@ function visit(s, f, b) {
 // (the dog bows and gets a paw on the nose; the cat taps first and gets a bow back).
 function meet(s, f, b, rand) {
   s.dir = f.x < s.x ? -1 : 1
-  if (f.mode === "sleep") return setMode(s, "sleep", Math.max(10, f.until - f.t))
+  if (f.mode === "sleep") {
+    // Joining one who naps because nobody is at the desk means napping on the same terms,
+    // or nothing would ever wake the visitor.
+    setMode(s, "sleep", Math.max(10, f.until - f.t))
+    s.settled = f.settled
+    return
+  }
   f.dir = -s.dir
   if (rand() < 0.4) {
     setMode(s, "sit", 3 + rand() * 3)
@@ -346,8 +352,7 @@ function ask(s, b, rand) {
   var cx = b.cursor ? b.cursor.x : (b.w + b.size) * (0.3 + 0.4 * rand())
   if (traits(b).fetches) {
     s.ball = { x: s.x, y: s.y, vx: 0, vy: 0, roll: 0, life: BALL_LIFE, held: false,
-               carried: true, fetched: false, home: cx }
-    s.asking = true
+               carried: true, fetched: false, home: cx, asked: true }
     walkTo(s, Math.max(0, Math.min(b.w, cx - b.size / 2)), "carry")
     return
   }
@@ -569,6 +574,7 @@ function watchCursor(s, b, dt) {
 function moveBall(s, b, dt, rand) {
   var o = s.ball
   if (!o) return
+  if (o.held) o.life = BALL_LIFE   // it doesn't run out in the hand
   o.life -= dt
   if (o.life <= 0) {
     s.ball = null
@@ -637,7 +643,8 @@ function tick(s, dt, b, rand) {
     }
   } else if (ON_LEDGE[s.mode]) {
     var l = ledge(s, b)
-    if (!l) drop(s)   // window closed or moved: she is suddenly in plain sight, and falls
+    // Window closed or moved: she is suddenly in plain sight, and falls. A shared screen brings her down too.
+    if (!l || b.hide) drop(s)
     else climbStep(s, b, l, dt, rand)
   } else if (s.mode === "pounce") {
     s.t += dt
@@ -704,6 +711,8 @@ function tick(s, dt, b, rand) {
     }
     distract(s, b, rand, dt)
     if (s.mode === "carry" && !(s.ball && s.ball.carried)) setMode(s, "idle", 0.5)   // lost the ball on the way
+    // A spot past the screen edge can't be reached; without this she would walk on the spot for it.
+    if (PACE[s.mode] && !OFFSCREEN[s.mode]) s.targetX = Math.max(0, Math.min(b.w, s.targetX))
     if (PACE[s.mode]) {
       // Getting out of a shared screen is done at a run.
       s.x += s.dir * (s.mode === "leave" && b.hide ? RUN_SPEED : PACE[s.mode]) * dt
@@ -782,8 +791,8 @@ function deliver(s, rand) {
   o.fetched = true
   o.vx = s.dir * 60
   o.vy = -120
-  var wait = s.asking ? { mode: "sit", duration: about(8, rand), then: { mode: "sleep", duration: about(25, rand) } } : null
-  s.asking = false
+  var wait = o.asked ? { mode: "sit", duration: about(8, rand), then: { mode: "sleep", duration: about(25, rand) } } : null
+  o.asked = false
   // Mostly a bow and a bark; sometimes just one of the two.
   var r = rand()
   var bark = { mode: "bark", duration: about(0.8, rand), then: wait }
@@ -850,13 +859,15 @@ function settle(s) {
 // Someone is back. The dog runs to the pointer and gets his hearts; the cat stretches and yawns.
 // A sleepy pet just stretches and sleeps on. One that was away comes back in.
 function welcome(s, b, rand, cursorX) {
+  var napped = s.settled
+  s.settled = false
   if (s.mode === "away") {
+    // Not in on the other's heels, here neither: the second one follows by the usual way.
+    if (b.friend && b.friend.mode === "enter") return
     s.stay = STAY_MIN + rand() * STAY_SPAN
     return comeBack(s, b, 0, rand())
   }
-  if (!s.settled) return
-  s.settled = false
-  if (s.mode !== "sleep") return
+  if (!napped || s.mode !== "sleep") return
   var x = cursorX === null || cursorX === undefined ? b.w / 2 : cursorX - b.size / 2
   x = Math.max(0, Math.min(b.w, x))
   // Usually the dog comes running and the cat takes her time; some days it is the other way round.
