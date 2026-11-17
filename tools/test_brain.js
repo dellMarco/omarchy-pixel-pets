@@ -816,12 +816,15 @@ for (const species of ["cat", "dog"]) {
   assert(seen.has("prowl") && seen.has("lurk"), "prowls and lurks up there: " + [...seen])
   assert.strictEqual(small.mode, "descend", "and climbs back down")
 
-  // A touch up there startles her and she drops to the floor; a reminder brings her down to ask.
+  // A click up there shoos her off: always down the front of the window with her claws out.
   const again = () => { const c = B.create(600, pb(64).floor); for (let i = 0; i < 30 * 3600 * 3 && c.perch === null; i++) { B.tick(c, 1 / 30, pb(64), rand); c.stay = 1e9 } return c }
-  const p = again(); p.petT = 9; B.pet(p, pb(64), rand)
-  assert(p.mode === "fall" && p.perch === null, "a click up there makes her fall")
-  for (let i = 0; i < 30 * 3 && p.mode === "fall"; i++) B.tick(p, 1 / 30, pb(64), rand)
-  assert.strictEqual(p.y, pb(64).floor, "onto the floor")
+  for (let n = 0; n < 5; n++) {
+    const p = again(); p.petT = 9; B.pet(p, pb(64), rand)
+    assert(p.mode === "claw" && p.perch === null && p.mark, "a click up there sends her sliding down, every time")
+    for (let i = 0; i < 30 * 10 && p.mode === "claw"; i++) B.tick(p, 1 / 30, pb(64), rand)
+    assert(p.y === pb(64).floor && p.mode === "idle", "down to the floor, not dropped: " + p.mode)
+    assert(p.mark && p.mark.pts.length > 10, "leaving her scratches")
+  }
   const w = again(); B.want(w, "water")
   let asked = false
   for (let i = 0; i < 30 * 60 && !asked; i++) { B.tick(w, 1 / 30, pb(64), rand); asked = w.mode === "ask" }

@@ -267,6 +267,10 @@ function perched(s, b) {
 // out, which scratches it from its top edge down.
 function startDown(s, l, b, rand) {
   if (s.staged ? !s.staged.claw : rand() >= CLAW_SHARE) return setMode(s, "descend", Infinity)
+  slideDown(s, l, b)
+}
+
+function slideDown(s, l, b) {
   setMode(s, "claw", Infinity)
   // Drifting towards the side of the window with more room. pts is the line her paws take:
   // [sideways from where she started, y], one point every couple of pixels.
@@ -964,9 +968,17 @@ function pet(s, b, rand) {
     s.petT = 0
     return
   }
-  // Crouched on a window under the bar there is no room to enjoy it: a touch up there startles
-  // her and down she comes.
-  if (s.perch !== null && s.low) return drop(s)
+  // Crouched on a window under the bar there is no room to enjoy it: a touch up there shoos
+  // her off, and she goes down the front of the window with her claws out.
+  if (s.perch !== null && s.low) {
+    var l = b ? perched(s, b) : null
+    if (!l) return drop(s)
+    slideDown(s, l, b)
+    s.goal = l.id
+    s.onTop = true
+    s.perch = null
+    return
+  }
   var dog = s.species === "dog"
   if (s.petT >= PET_WINDOW || s.patience === null) {
     s.pets = 0
