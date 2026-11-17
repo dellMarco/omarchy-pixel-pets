@@ -13,7 +13,9 @@ windows. What follows describes the cat; the dog and the two together come furth
 
 Now and then she climbs up one of your windows (back to you, tail swinging). If there is room above it she
 gets onto the top and treats it as her floor for a while: walks along it, sits, grooms, naps, then climbs
-back down. Otherwise she slips over its top edge and peeks back over it, then climbs back down.
+back down. On a window right under the bar there is no room to stand: at the small size she keeps low up
+there, prowling in a crouch and napping in front of the bar; at bigger sizes she slips over the top edge
+and peeks back over it, then climbs back down.
 Click her while she peeks and she ducks; if the window closes or moves, or you switch workspace, she drops.
 
 Between all that she grooms, yawns, and stretches after naps.

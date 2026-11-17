@@ -795,4 +795,38 @@ for (const species of ["cat", "dog"]) {
   assert.strictEqual(h.mode, "away")
   B.pet(h, pb("cat"), rand); assert(h.want === "water" && h.mode === "away", "no serving off screen")
 }
+// ---------- A window right under the bar: the small cat keeps low on it ----------
+{
+  const ground = 1079, roof = { id: "0xroof", x: 10, y: 36, w: 1900 }
+  const pb = size => ({ w: 1920 - size, floor: ground - size + size / 16, ground, size, ballSize: size * 0.375, peek: size * 10 / 32,
+                        ledges: [roof], species: "cat", energy: 0.5 })
+  const small = B.create(600, pb(64).floor); small.stay = 1e9
+  for (let i = 0; i < 30 * 3600 * 3 && small.perch === null; i++) { B.tick(small, 1 / 30, pb(64), rand); small.stay = 1e9 }
+  assert(small.perch === roof.id && small.low, "the small cat gets onto a window under the bar")
+  assert.strictEqual(small.y, roof.y - 60, "feet on its top edge, her frame reaching past the top of the screen")
+  const seen = new Set()
+  let ticks = 0
+  while (small.perch !== null && ticks < 30 * 600) {
+    B.tick(small, 1 / 30, pb(64), rand); ticks++
+    if (small.perch === null) break
+    seen.add(small.mode)
+    assert(B.LOW[small.mode], "upright under the bar: " + small.mode)
+    assert(small.x >= roof.x && small.x + 64 <= roof.x + roof.w)
+  }
+  assert(seen.has("prowl") && seen.has("lurk"), "prowls and lurks up there: " + [...seen])
+  assert.strictEqual(small.mode, "descend", "and climbs back down")
+
+  // A pet is taken lying low; a reminder brings her down to ask.
+  const again = () => { const c = B.create(600, pb(64).floor); for (let i = 0; i < 30 * 3600 * 3 && c.perch === null; i++) { B.tick(c, 1 / 30, pb(64), rand); c.stay = 1e9 } return c }
+  const p = again(); p.petT = 9; B.pet(p, pb(64), rand)
+  for (let i = 0; i < 30 * 20; i++) { B.tick(p, 1 / 30, pb(64), rand); p.perchFor = 99; assert(B.LOW[p.mode] || p.mode === "petted", "sat up after a pet: " + p.mode) }
+  const w = again(); B.want(w, "water")
+  let asked = false
+  for (let i = 0; i < 30 * 60 && !asked; i++) { B.tick(w, 1 / 30, pb(64), rand); asked = w.mode === "ask" }
+  assert(asked && w.y === pb(64).floor, "comes down to ask")
+
+  // A medium cat doesn't fit under the bar: she only peeks over that window.
+  const medium = B.create(600, pb(96).floor)
+  for (let i = 0; i < 30 * 3600 * 2; i++) { B.tick(medium, 1 / 30, pb(96), rand); medium.stay = 1e9; assert(medium.perch === null, "no room for a medium cat") }
+}
 console.log("brain ok")

@@ -53,6 +53,9 @@ var ANIMS = {
   ask:     { row: 16, frames: 2, fps: 2 },
   drink:   { row: 17, frames: 4, fps: 4 },
   eat:     { row: 18, frames: 4, fps: 4 },
+  // On a window with little room above it: moving and waiting in a crouch.
+  prowl:   { row: 9, frames: 2, fps: 5 },
+  lurk:    { row: 9, frames: 2, fps: 1.5 },
   // Wandering off the edge of the screen and coming back.
   leave:   { row: 1, frames: 6, fps: 10 },
   away:    { row: 0, frames: 4, fps: 3 },
@@ -81,11 +84,11 @@ var SPEED = 60          // px/s walking
 var RUN_SPEED = 150     // px/s chasing the ball
 // Modes that move along the floor towards targetX, and how fast.
 var PACE = {
-  walk: SPEED, sniff: 35, run: RUN_SPEED, carry: 120, leave: SPEED, enter: SPEED,
+  walk: SPEED, sniff: 35, prowl: 30, run: RUN_SPEED, carry: 120, leave: SPEED, enter: SPEED,
   chase: RUN_SPEED, flee: 190, scurry: RUN_SPEED, greet: RUN_SPEED, zoom: 320
 }
 // Of those, the ones that end on arrival and then decide what comes next.
-var ARRIVES = { walk: true, sniff: true, leave: true, enter: true, flee: true, scurry: true, greet: true, zoom: true }
+var ARRIVES = { walk: true, sniff: true, prowl: true, leave: true, enter: true, flee: true, scurry: true, greet: true, zoom: true }
 var HOP_HEIGHT = 30     // px
 var SPIN_FLIP = 0.16    // s between turns while chasing his tail
 // Where the ball cell sits in the 32px frame while carried in the mouth, facing right.
@@ -97,6 +100,10 @@ var HANG_CHANCE = 0.15  // share of idle decisions that go for a window
 var PERCH_SHARE = 0.7   // of the trips up such a window end on top of it; the rest peek over it
 var PERCH_MIN = 40      // s up there, at least
 var PERCH_SPAN = 140    // s more, at random
+// A window right under the bar leaves no room to stand on it, but a small cat fits lying down or
+// crouched, her back in front of the bar. Up there she keeps low: prowls, lurks, naps.
+var LOW_ROWS = 17       // sprite rows of room above the edge that a crouching cat needs, bar her ear tips
+var LOW = { prowl: true, lurk: true, sleep: true, stretch: true }   // what she does under a low ceiling
 var CLIMB_SPEED = 90    // px/s climbing up / down the front of a window
 var PEEK_SPEED = 25     // px/s rising over / sinking below the window edge
 
@@ -152,7 +159,7 @@ function create(x, y) {
     ball: null, lastCursor: null, cursorStill: Infinity, pounces: 0, bored: 0, from: x, to: x,
     visiting: false, then: null,
     stay: null, onFor: 0,   // s left before wandering off; s on screen since she came back
-    perch: null, perchY: 0, perchFor: 0, onTop: false,   // the window she is on, by id; onTop: this climb goes over the top, in full view
+    perch: null, perchY: 0, perchFor: 0, onTop: false, low: false,   // the window she is on, by id; onTop: this climb goes over the top, in full view
     pending: false, laps: 0, offerDay: null, offerAt: [], offerDone: [],
     pets: 0, petT: Infinity, patience: null, grumpy: 0, calm: 0,
     dream: null, dreamAt: null, settled: false,
@@ -166,9 +173,9 @@ function create(x, y) {
 // How often Service.qml should tick her, in ms. Full rate only while something moves;
 // the sprite animates on its own, so a still pet only needs to notice things.
 var STILL = { idle: true, sit: true, groom: true, yawn: true, stretch: true, petted: true, peek: true, held: true,
-              ask: true, drink: true, eat: true, bark: true, invite: true, belly: true }
+              ask: true, drink: true, eat: true, bark: true, invite: true, belly: true, lurk: true }
 // Walking paces: 3px a step is one sprite pixel at medium size.
-var STROLL = { walk: true, sniff: true, leave: true, enter: true }
+var STROLL = { walk: true, sniff: true, prowl: true, leave: true, enter: true }
 function tickInterval(mode, hasBall) {
   if (hasBall) return 33
   if (mode === "sleep" || mode === "away") return 1000
@@ -242,19 +249,27 @@ function perched(s, b) {
   return null
 }
 
+// Back down the front of the window, in full view.
+function climbDown(s, l) {
+  setMode(s, "descend", Infinity)
+  s.goal = l.id
+  s.onTop = true
+  s.perch = null
+}
+
 // What she does next up there: the quiet half of what she does on the floor, within the
 // window's width. When her time is up, or she is due off screen, she climbs back down.
 function perchNext(s, b, l, rand) {
-  if (s.perchFor <= 0 || s.stay <= 0) {
-    setMode(s, "descend", Infinity)
-    s.goal = l.id
-    s.onTop = true
-    s.perch = null
-    return
-  }
+  if (s.perchFor <= 0 || s.stay <= 0) return climbDown(s, l)
   var e = b.energy === undefined ? 0.5 : b.energy
   var tired = (1 - e) * (1 - e)
   var r = rand()
+  if (s.low) {
+    if (r < 0.35) walkTo(s, l.x + rand() * (l.w - b.size), "prowl")
+    else if ((r -= 0.35) < 0.1 + 0.35 * tired) setMode(s, "sleep", (25 + rand() * 50) * (0.5 + 2 * tired))
+    else setMode(s, "lurk", 2 + rand() * 4)
+    return
+  }
   if (r < 0.3) walkTo(s, l.x + rand() * (l.w - b.size))
   else if ((r -= 0.3) < 0.25) setMode(s, "sit", 3 + rand() * 5)
   else if ((r -= 0.25) < 0.12) setMode(s, "groom", 3 + rand() * 3)
@@ -492,13 +507,21 @@ function next(s, b, rand) {
     s.stay = STAY_MIN + rand() * STAY_SPAN
     return comeBack(s, b, rand(), rand())
   }
+  if (s.perch !== null && s.low) {
+    // Under a low ceiling there is no sitting up after a pet or standing about after a nap.
+    if (m === "sleep") return setMode(s, "stretch", 1.5)
+    var roof = perched(s, b)
+    return roof ? perchNext(s, b, roof, rand) : drop(s)
+  }
   if (m === "petted") return setMode(s, "sit", 3 + rand() * 5)
   if ((m === "walk" || m === "flee") && s.goal !== null) {
     var l = ledge(s, b)
     setMode(s, "climb", Infinity)
     // With room for her above the edge she mostly goes over the top, in full view, to stay a while;
     // otherwise up behind the window to peek over it.
-    s.onTop = !!l && perchTop(l, b) >= 0 && rand() < PERCH_SHARE
+    // Room to stand, or at least to crouch (the small cat under the bar).
+    s.low = !!l && perchTop(l, b) < 0
+    s.onTop = !!l && l.y >= (s.low ? LOW_ROWS * b.size / 32 : 0) && rand() < PERCH_SHARE
     if (l && !s.onTop) s.clipTop = l.y
     return
   }
@@ -729,6 +752,15 @@ function tick(s, dt, b, rand) {
       }
       s.perchFor -= dt
       s.targetX = Math.max(top.x, Math.min(top.x + top.w - b.size, s.targetX))
+      if (s.low) {
+        // Asking for something means sitting up, and there is no room: she comes down for it.
+        if (s.want) {
+          climbDown(s, top)
+          return s
+        }
+        // Whatever else would have her upright up here (a pet, a welcome) she takes lying low.
+        if (!LOW[s.mode] && s.mode !== "petted") setMode(s, "lurk", 2)
+      }
     }
     s.y = top ? perchTop(top, b) : b.floor
     s.t += dt
@@ -790,7 +822,7 @@ function climbStep(s, b, l, dt, rand) {
     s.y -= CLIMB_SPEED * dt
     if (s.y <= perchTop(l, b)) {   // feet on the edge: she is up
       s.y = perchTop(l, b)
-      setMode(s, "idle", 1 + rand() * 2)
+      setMode(s, s.low ? "lurk" : "idle", 1 + rand() * 2)
       s.perch = l.id
       s.perchY = l.y
       s.perchFor = PERCH_MIN + rand() * PERCH_SPAN
