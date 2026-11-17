@@ -816,10 +816,12 @@ for (const species of ["cat", "dog"]) {
   assert(seen.has("prowl") && seen.has("lurk"), "prowls and lurks up there: " + [...seen])
   assert.strictEqual(small.mode, "descend", "and climbs back down")
 
-  // A pet is taken lying low; a reminder brings her down to ask.
+  // A touch up there startles her and she drops to the floor; a reminder brings her down to ask.
   const again = () => { const c = B.create(600, pb(64).floor); for (let i = 0; i < 30 * 3600 * 3 && c.perch === null; i++) { B.tick(c, 1 / 30, pb(64), rand); c.stay = 1e9 } return c }
   const p = again(); p.petT = 9; B.pet(p, pb(64), rand)
-  for (let i = 0; i < 30 * 20; i++) { B.tick(p, 1 / 30, pb(64), rand); p.perchFor = 99; assert(B.LOW[p.mode] || p.mode === "petted", "sat up after a pet: " + p.mode) }
+  assert(p.mode === "fall" && p.perch === null, "a click up there makes her fall")
+  for (let i = 0; i < 30 * 3 && p.mode === "fall"; i++) B.tick(p, 1 / 30, pb(64), rand)
+  assert.strictEqual(p.y, pb(64).floor, "onto the floor")
   const w = again(); B.want(w, "water")
   let asked = false
   for (let i = 0; i < 30 * 60 && !asked; i++) { B.tick(w, 1 / 30, pb(64), rand); asked = w.mode === "ask" }
@@ -852,5 +854,53 @@ for (const species of ["cat", "dog"]) {
   assert(downs > 40, "came down often enough to judge: " + downs)
   assert(slides / downs > 0.1 && slides / downs < 0.32, "about one way down in five is a slide: " + slides + " of " + downs)
   assert(longest / 30 > 4 && longest / 30 < 6, "the scratches fade a few seconds after she lands: " + (longest / 30).toFixed(1))
+}
+// ---------- The tour: every step can be started and runs through, for each pet and the pair ----------
+{
+  const floors = { cat: 989, dog: 959 }, sizes = { cat: 96, dog: 128 }
+  const shelf = { id: "0xshelf", x: 300, y: 500, w: 800 }
+  const cat = B.create(600, floors.cat), dog = B.create(1200, floors.dog)
+  const pb = k => ({ w: 1920 - sizes[k], floor: floors[k], ground: 1079, size: sizes[k], ballSize: 36, peek: 30, ledges: [shelf], species: k,
+                     friend: k === "cat" ? dog : cat, friendSize: sizes[k === "cat" ? "dog" : "cat"], energy: 0.5 })
+  const both = () => { B.tick(cat, 1 / 30, pb("cat"), rand); B.tick(dog, 1 / 30, pb("dog"), rand)
+    for (const p of [cat, dog]) assert(B.ANIMS[p.mode], "no animation for mode " + p.mode) }
+  const play = (step, s, k, f) => {
+    // The way Service.qml runs it.
+    for (let i = 0; i < 30 * 120; i++) {
+      B.freeUp(s, pb(k), rand); if (f) B.freeUp(f, pb("cat"), rand)
+      if (B.free(s) && (!f || B.free(f))) break
+      both()
+    }
+    assert(B.free(s), step.name + ": never got free, stuck in " + s.mode)
+    s.ball = null; s.staged = null; s.want = null
+    if (step.start(s, pb(k), rand, f) === false) return "skipped"
+    const seen = new Set()
+    let t = 0
+    for (; t < step.seconds; t += 1 / 30) {
+      both(); s.stay = 1e9; if (f) f.stay = 1e9
+      seen.add(s.mode)
+      if (t > 1 && step.done && step.done(s)) break
+    }
+    return { seen, t }
+  }
+  const expect = { "Zoomies": "zoom", "Fetch": "carry", "Sniffing": "sniff", "Belly rub": "belly", "Drinking": "drink", "Eating": "eat",
+                   "Asking for water": "ask", "Up a window to peek over it": "peek", "Wandering off and back": "away",
+                   "Sleep, with a dream": "sleep", "One pet too many: a swat": "bat", "Chasing his tail": "spin" }
+  for (const [k, s] of [["cat", cat], ["dog", dog]]) {
+    for (const step of B.tour(k)) {
+      const r = play(step, s, k, null)
+      assert(r !== "skipped", step.name + " was skipped though there is a window")
+      if (expect[step.name]) assert(r.seen.has(expect[step.name]), k + " " + step.name + " never showed " + expect[step.name] + ": " + [...r.seen])
+      if (step.done) assert(r.t < step.seconds - 0.5, k + " " + step.name + " ran into its time limit")
+    }
+  }
+  const claws = B.tour("cat").find(x => x.name.indexOf("claws") > 0)
+  assert(play(claws, cat, "cat", null).seen.has("claw"), "the claw slide is shown")
+  for (const step of B.tourTogether()) {
+    const r = play(step, dog, "dog", cat)
+    if (step.done) assert(r.t < step.seconds - 0.5, step.name + " ran into its time limit, dog in " + dog.mode + ", cat in " + cat.mode)
+  }
+  B.tourEnd(cat, rand); B.tourEnd(dog, rand)
+  assert(cat.staged === null && cat.stay < 1e6, "back to their own lives afterwards")
 }
 console.log("brain ok")

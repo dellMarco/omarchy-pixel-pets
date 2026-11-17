@@ -166,7 +166,8 @@ function create(x, y) {
     visiting: false, then: null,
     stay: null, onFor: 0,   // s left before wandering off; s on screen since she came back
     perch: null, perchY: 0, perchFor: 0, onTop: false, low: false,
-    mark: null,   // scratches she left on a window: { id, x, top, bottom, left }   // the window she is on, by id; onTop: this climb goes over the top, in full view
+    mark: null,   // scratches she left on a window: { id, x, top, bottom, left }
+    staged: null, // set by the tour: which way the choices that are usually left to chance go   // the window she is on, by id; onTop: this climb goes over the top, in full view
     pending: false, laps: 0, offerDay: null, offerAt: [], offerDone: [],
     pets: 0, petT: Infinity, patience: null, grumpy: 0, calm: 0,
     dream: null, dreamAt: null, settled: false,
@@ -260,7 +261,7 @@ function perched(s, b) {
 // Sets off down the front of a window: mostly climbing, now and then sliding with her claws
 // out, which scratches it from its top edge down.
 function startDown(s, l, rand) {
-  if (rand() >= CLAW_SHARE) return setMode(s, "descend", Infinity)
+  if (s.staged ? !s.staged.claw : rand() >= CLAW_SHARE) return setMode(s, "descend", Infinity)
   setMode(s, "claw", Infinity)
   s.mark = { id: l.id, x: s.x, top: l.y, bottom: l.y, left: MARK_TIME }
 }
@@ -334,7 +335,7 @@ function meet(s, f, b, rand) {
     return
   }
   f.dir = -s.dir
-  if (rand() < 0.4) {
+  if (s.staged ? !s.staged.play : rand() < 0.4) {
     setMode(s, "sit", 3 + rand() * 3)
     setMode(f, "sit", 3 + rand() * 3)
   } else if (b.species === "dog") {
@@ -536,7 +537,7 @@ function next(s, b, rand) {
     // otherwise up behind the window to peek over it.
     // Room to stand, or at least to crouch (the small cat under the bar).
     s.low = !!l && perchTop(l, b) < 0
-    s.onTop = !!l && l.y >= (s.low ? LOW_ROWS * b.size / 32 : 0) && rand() < PERCH_SHARE
+    s.onTop = !!l && l.y >= (s.low ? LOW_ROWS * b.size / 32 : 0) && (s.staged ? s.staged.onTop : rand() < PERCH_SHARE)
     if (l && !s.onTop) s.clipTop = l.y
     return
   }
@@ -841,7 +842,7 @@ function climbStep(s, b, l, dt, rand) {
       setMode(s, s.low ? "lurk" : "idle", 1 + rand() * 2)
       s.perch = l.id
       s.perchY = l.y
-      s.perchFor = PERCH_MIN + rand() * PERCH_SPAN
+      s.perchFor = s.staged ? 10 : PERCH_MIN + rand() * PERCH_SPAN
     }
   } else if (s.mode === "climb") {
     s.y -= CLIMB_SPEED * dt
@@ -853,7 +854,7 @@ function climbStep(s, b, l, dt, rand) {
     s.y -= PEEK_SPEED * dt
     if (s.y <= top) {
       s.y = top
-      setMode(s, "peek", 6 + rand() * 9)
+      setMode(s, "peek", s.staged ? 4 : 6 + rand() * 9)
     }
   } else if (s.mode === "peek") {
     s.y = top
@@ -941,6 +942,9 @@ function pet(s, b, rand) {
     s.petT = 0
     return
   }
+  // Crouched on a window under the bar there is no room to enjoy it: a touch up there startles
+  // her and down she comes.
+  if (s.perch !== null && s.low) return drop(s)
   var dog = s.species === "dog"
   if (s.petT >= PET_WINDOW || s.patience === null) {
     s.pets = 0
@@ -1086,4 +1090,131 @@ function dayPhase(hour) {
   if (h < 12) return "Morning: full of energy"
   if (h < 17) return "Afternoon: taking it steady"
   return "Evening: getting sleepy"
+}
+
+// ---------- Tour ----------
+// Everything a pet does, one thing at a time, for looking at it. Service.qml runs it on request
+// (omarchy-shell pixel-pets tour): it waits until the pet is free(), calls a step's start(), shows
+// its name, and moves on after `seconds`, or sooner when done() says so. start() returning false
+// skips the step (no window to climb, say).
+
+// On the floor and not in the middle of something that has to finish first.
+function free(s) {
+  return !OFFSCREEN[s.mode] && !ON_LEDGE[s.mode] && s.perch === null && s.mode !== "held" && s.mode !== "fall"
+    && s.mode !== "hop" && s.mode !== "pounce"
+}
+
+// Gets her free for the next step: back on screen, down from a window.
+function freeUp(s, b, rand) {
+  callBack(s, b, rand)
+  if (ON_LEDGE[s.mode] || s.perch !== null) drop(s)
+  s.stay = 1e9   // no wandering off in the middle of it
+}
+
+// Back to her own life.
+function tourEnd(s, rand) {
+  s.staged = null
+  s.stay = STAY_MIN + rand() * STAY_SPAN
+}
+
+function tour(species) {
+  var dog = species === "dog"
+  var she = dog ? "his" : "her"
+  var pose = function(name, mode, seconds, also) {
+    return { name: name, seconds: seconds, start: function(s) { setMode(s, mode, seconds); if (also) also(s) } }
+  }
+  // The window she can get onto: one with room on top if there is one, else any.
+  var windowFor = function(s, b) {
+    var ls = b.ledges || [], pick = null
+    for (var i = 0; i < ls.length; i++)
+      if (!pick || (perchTop(ls[i], b) >= 0 && perchTop(pick, b) < 0)) pick = ls[i]
+    return pick
+  }
+  var upAWindow = function(name, staged) {
+    var climbed = false
+    return { name: name, seconds: 120,
+      start: function(s, b) {
+        var l = traits(b).climbs ? windowFor(s, b) : null
+        if (!l) return false
+        climbed = false
+        s.staged = staged
+        walkTo(s, Math.max(l.x, Math.min(l.x + l.w - b.size, s.x)))
+        s.goal = l.id
+      },
+      done: function(s) {
+        if (ON_LEDGE[s.mode] || s.perch !== null) climbed = true
+        return climbed && free(s)
+      } }
+  }
+  var away = false
+  var steps = [
+    pose("Idle", "idle", 3),
+    { name: "Walk", seconds: 4, start: function(s, b) { walkTo(s, s.x < b.w / 2 ? s.x + 220 : s.x - 220) } },
+    pose("Sit", "sit", 3),
+    pose(dog ? "Scratching" : "Grooming", "groom", 3.5),
+    pose("Yawn", "yawn", 1.6),
+    pose("Sleep, with a dream", "sleep", 7, function(s) { s.dreamAt = 1 }),
+    pose("Stretch", "stretch", 1.6),
+    pose("Petted", "petted", 2.5),
+    { name: "Asking for water", seconds: 3.5, start: function(s) { setMode(s, "idle", 1); want(s, "water") } },
+    { name: "Drinking", seconds: 4, start: function(s, b, rand) { want(s, "water"); pet(s, b, rand) } },
+    { name: "Asking for food", seconds: 3.5, start: function(s) { setMode(s, "idle", 1); want(s, "food") } },
+    { name: "Eating", seconds: 5, start: function(s, b, rand) { want(s, "food"); pet(s, b, rand) } },
+    { name: "Startled by a window", seconds: 3.5, start: function(s, b) {
+        setMode(s, "idle", 1); s.calm = 0
+        startle(s, b, function() { return 0.5 }) } },
+    { name: "Zoomies", seconds: 25, start: function(s, b, rand) { zoomies(s, b, rand) },
+      done: function(s) { return s.mode !== "zoom" } },
+    { name: "Wandering off and back", seconds: 90,
+      start: function(s, b, rand) { away = false; setMode(s, "idle", 1); leave(s, b, rand); s.awayFor = 2 },
+      done: function(s) { if (s.mode === "away") away = true; return away && !OFFSCREEN[s.mode] } }
+  ]
+  if (dog) steps.push(
+    { name: "Sniffing", seconds: 4.5, start: function(s, b) { walkTo(s, s.x < b.w / 2 ? s.x + 150 : s.x - 150, "sniff") } },
+    pose("Bark", "bark", 1.6),
+    pose("Chasing his tail", "spin", 2.6),
+    pose("Play bow", "invite", 1.8),
+    pose("Belly rub", "belly", 4),
+    { name: "Fetch", seconds: 30, start: function(s, b, rand) { setMode(s, "idle", 1); spawnBall(s, b, rand) },
+      done: function(s) { return !s.ball || (s.ball.fetched && STILL[s.mode] && s.mode !== "invite" && s.mode !== "bark") } }
+  )
+  else steps.push(
+    { name: "Yarn: chasing and batting it", seconds: 9, start: function(s, b, rand) { setMode(s, "idle", 1); spawnBall(s, b, rand) } },
+    { name: "One pet too many: a swat", seconds: 4, start: function(s, b) {
+        setMode(s, "bat", 0.6)
+        s.then = { mode: "walk", x: Math.max(0, Math.min(b.w, s.x + (s.x > b.w / 2 ? -250 : 250))) } } },
+    upAWindow("Up a window to peek over it", { onTop: false, claw: false, play: false }),
+    upAWindow("Onto a window, and down with " + she + " claws out", { onTop: true, claw: true, play: false })
+  )
+  return steps
+}
+
+// What the two do together. s is the dog, f the cat.
+function tourTogether() {
+  var began = false
+  var over = function(mode) {   // once the dog has been in `mode` and is out of it again
+    return function(s) { if (s.mode === mode) began = true; return began && s.mode !== mode && free(s) }
+  }
+  var visiting = function(name, play) {
+    return { name: name, seconds: 40,
+      start: function(s, b, rand, f) {
+        began = false
+        setMode(f, "sit", 30); setMode(s, "idle", 1)
+        s.staged = { onTop: false, claw: false, play: play }
+        visit(s, f, b)
+      },
+      done: function(s) { if (!s.visiting && s.mode !== "walk") began = true; return began && s.mode === "idle" } }
+  }
+  return [
+    visiting("A visit: sitting together", false),
+    visiting("A visit: play", true),
+    { name: "Napping side by side", seconds: 45,
+      start: function(s, b, rand, f) { began = false; setMode(f, "sleep", 25); setMode(s, "idle", 1); visit(s, f, b) },
+      done: function(s) { if (s.mode === "sleep" && s.t > 5) began = true; return began } },
+    { name: "Yawning one after the other", seconds: 5,
+      start: function(s, b, rand, f) { setMode(f, "idle", 2); yawnTogether(s, f, function() { return 0.3 }) } },
+    { name: "The chase", seconds: 60,
+      start: function(s, b, rand, f) { began = false; setMode(f, "idle", 1); chase(s, f) },
+      done: over("bark") }
+  ]
 }

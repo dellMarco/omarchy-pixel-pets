@@ -139,6 +139,71 @@ Item {
 
   function hurry() { win.hurry() }
 
+  // ---------- Tour: everything the pets do, one thing at a time, each with its name ----------
+  // Started (and stopped) from outside: omarchy-shell pixel-pets tour
+  IpcHandler {
+    target: "pixel-pets"
+    function tour(): void { root.touring ? root.endTour() : root.startTour() }
+    function stop(): void { root.endTour() }
+  }
+  property var tourSteps: []      // { view, partner, step }, in order
+  property int tourAt: -1
+  property real tourSince: 0      // when the current step started; 0 while waiting for the pet to be free
+  readonly property bool touring: tourAt >= 0
+  function startTour() {
+    var steps = [], views = win.views.filter(v => v.active)
+    for (var i = 0; i < views.length; i++)
+      Brain.tour(views[i].species).forEach(step => steps.push({ view: views[i], partner: null, step: step }))
+    if (views.length > 1)
+      Brain.tourTogether().forEach(step => steps.push({ view: dogView, partner: catView, step: step }))
+    tourSteps = steps
+    tourSince = 0
+    tourAt = steps.length ? 0 : -1
+  }
+  function endTour() {
+    win.each(brain => Brain.tourEnd(brain, Math.random))
+    catView.caption = dogView.caption = ""
+    tourAt = -1
+  }
+  Timer {
+    interval: 200
+    running: root.touring && store.shown
+    repeat: true
+    onTriggered: {
+      if (root.tourAt >= root.tourSteps.length) return root.endTour()
+      var entry = root.tourSteps[root.tourAt], view = entry.view, other = entry.partner
+      var s = view.brain, f = other ? other.brain : null
+      if (!view.active || !s || (other && (!other.active || !f))) { root.tourAt++; return }
+      win.hurry()
+      if (root.tourSince === 0) {
+        // Wait until she is on the floor and free; fetch her back if she is off somewhere.
+        var ready = true
+        var pair = other ? [view, other] : [view]
+        for (var i = 0; i < pair.length; i++) {
+          Brain.freeUp(pair[i].brain, win.boundsFor(pair[i]), Math.random)
+          if (!Brain.free(pair[i].brain)) ready = false
+        }
+        if (!ready) return
+        s.ball = null
+        s.staged = null
+        s.want = null
+        if (entry.step.start(s, win.boundsFor(view), Math.random, f) === false) { root.tourAt++; return }
+        root.tourSince = Date.now()
+        view.caption = entry.step.name
+        if (other) other.caption = entry.step.name
+        return
+      }
+      s.stay = 1e9
+      if (f) f.stay = 1e9
+      var age = (Date.now() - root.tourSince) / 1000
+      if (age < entry.step.seconds && !(age > 1 && entry.step.done && entry.step.done(s))) return
+      view.caption = ""
+      if (other) other.caption = ""
+      root.tourSince = 0
+      root.tourAt++
+    }
+  }
+
   function giveBall(species) {
     var view = species === "dog" ? dogView : catView
     if (!view.brain || !store.shown) return
@@ -446,6 +511,8 @@ Item {
     readonly property string name: root.nameOf(species)
     // What she is dreaming of right now: "toy", "friend" or nothing.
     property string dream: ""
+    // What the tour is showing on her right now.
+    property string caption: ""
     // Scratch marks she left sliding down a window.
     property bool marked: false
     property int markX: 0
@@ -604,11 +671,12 @@ Item {
       }
     }
 
-    // Name tag, shown while she is being petted. Not in the input mask, so it never blocks clicks.
+    // Name tag, shown while she is being petted; during a tour it names what she is doing.
+    // Not in the input mask, so it never blocks clicks. Kept on screen when she is up near its top.
     Rectangle {
-      visible: pet.mode === "petted" && view.name !== ""
-      x: Math.round(pet.x + (view.size - width) / 2)
-      y: pet.y - height - 4
+      visible: view.caption !== "" || (pet.mode === "petted" && view.name !== "")
+      x: Math.round(Math.max(4, Math.min(win.fullWidth - width - 4, pet.x + (view.size - width) / 2)))
+      y: Math.max(4, pet.y - height - 4)
       width: nameText.implicitWidth + 14
       height: nameText.implicitHeight + 6
       radius: 4
@@ -619,7 +687,7 @@ Item {
       Text {
         id: nameText
         anchors.centerIn: parent
-        text: view.name
+        text: view.caption !== "" ? view.caption : view.name
         color: "#fff6e8"
         font.pixelSize: 13
         font.bold: true
