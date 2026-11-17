@@ -39,6 +39,33 @@ Panel {
   // nf-md-cat, nf-md-dog, or nf-md-paw for both
   readonly property int icon: out.length > 1 ? 0xF03E9 : out[0] === "dog" ? 0xF0A43 : 0xF011B
 
+  // What each control does, shown in the help line while the pointer is on it.
+  readonly property var helpTexts: ({
+    species: ["Pets", "A cat, a dog, or both. With both out they visit each other, play, nap side by side, and the dog sometimes chases the cat."],
+    shown: ["Show pets", "Hides or shows whoever is picked here. Right-clicking the bar icon does the same."],
+    cat: ["Cat", "Her name pops up when you pet her. A new coat shows on the desktop right away."],
+    dog: ["Dog", "His name pops up when you pet him. A new coat shows on the desktop right away."],
+    size: ["Size", "Sets both. The dog is always one step bigger than the cat."],
+    energy: ["Energy", "More walking and play, less sleep, and more things done on their own: visits, the dog chasing the cat (not when lazy), zoomies (only near playful). Toys they bring unasked (dog four times a day, cat once) and trips off screen don't depend on it."],
+    dayCycle: ["Follow time of day", "Off: energy stays where the slider is, all day. On: lively mornings, sleepy evenings and nights around it. The phase right now shows next to ENERGY."],
+    cameraShy: ["Camera shy", "They run off screen while the screen or a window is shared or recorded, and come back about 15 seconds after it stops."],
+    chaseMouse: ["Stalk the pointer", "They crouch and pounce at the pointer when it moves near the bottom edge. Off: they ignore it, and a toy they bring is dropped anywhere, not below the pointer."],
+    hangOnWindows: ["Cat climbs windows", "She climbs a window and peeks over its top edge, on her own and to escape when the dog chases her. Off: she stays on the floor and escapes by running off screen."],
+    catToy: ["Give yarn ball", "She chases and bats it around; you can drag and throw it too. Giving it calls her back if she is off screen."],
+    dogToy: ["Throw tennis ball", "He fetches it back to where it was thrown from and barks for another throw. Throwing it calls him back if he is off screen."]
+  })
+  property string helpKey: ""
+  function over(key, isHovered) {
+    if (isHovered) helpKey = key
+    else if (helpKey === key) helpKey = ""
+  }
+  readonly property string helpText: {
+    var entry = helpTexts[helpKey]
+    if (!entry) return "Point at a setting to read what it does here. Click a pet to pet it, drag it to pick it up, right-click the bar icon to hide or show them."
+    var hidden = helpKey.slice(-3) === "Toy" && store && !store.shown ? " Turn on Show pets first." : ""
+    return "<font color=\"" + root.bar.foreground + "\"><b>" + entry[0] + ".</b></font> " + entry[1] + hidden
+  }
+
   // The service is created independently of the bar, so look it up when needed.
   property var pet: null
   function findPet() {
@@ -102,8 +129,47 @@ Panel {
           font.pixelSize: Style.font.body
         }
 
+        // ---------- Which pets, and whether they show ----------
         Section {
-          title: "PETS"
+          Item {
+            width: parent.width
+            implicitHeight: petsHeader.implicitHeight
+
+            PanelSectionHeader {
+              id: petsHeader
+              text: "PETS"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+            }
+
+            Row {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(6)
+
+              PanelSectionHeader {
+                id: showLabel
+                text: "SHOW"
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              // Sized off the label so it reads as part of the header; the offset centres it on
+              // the label's glyphs, which sit below the box centre because of its top padding.
+              ToggleSwitch {
+                trackHeight: Math.round(showLabel.font.pixelSize * 1.2)
+                cursorPad: Style.space(3)
+                anchors.verticalCenter: showLabel.verticalCenter
+                anchors.verticalCenterOffset: Math.round(showLabel.topPadding / 2)
+                checked: root.store ? root.store.shown : false
+                foreground: root.bar.foreground
+                onToggled: root.set("shown", !(root.store && root.store.shown))
+                onHovered: function(isHovered) { root.over("shown", isHovered) }
+              }
+            }
+          }
+
           ButtonGroup {
             width: parent.width
             options: [
@@ -116,27 +182,31 @@ Panel {
             fontFamily: root.bar.fontFamily
             fontSize: Style.font.bodySmall
             onChanged: function(v) { root.set("species", v) }
+            onHovered: function(index, isHovered) { root.over("species", isHovered) }
           }
-          Hint { text: "With both out they visit each other, play, nap side by side, and the dog sometimes chases the cat." }
         }
 
-        // ---------- Per pet: live preview · name · coat ----------
-        Repeater {
-          model: root.out
+        // ---------- Per pet, side by side: live preview · name · coat ----------
+        Row {
+          id: cells
+          visible: !!root.store
+          width: parent.width
+          spacing: Style.space(6)
+          // One pet takes the full width, two share it.
+          readonly property real cellWidth: (width - spacing * (root.out.length - 1)) / Math.max(1, root.out.length)
 
-          Column {
-            id: card
-            required property string modelData
-            readonly property var kind: root.species[modelData]
-
-            width: column.width
-            spacing: Style.space(8)
-
-            PanelSeparator { foreground: root.bar.foreground }
+          Repeater {
+            model: root.out
 
             Item {
-              width: parent.width
+              id: cell
+              required property string modelData
+              readonly property var kind: root.species[modelData]
+
+              width: cells.cellWidth
               implicitHeight: preview.height
+
+              HoverHandler { onHoveredChanged: root.over(cell.modelData, hovered) }
 
               AnimatedSprite {
                 id: preview
@@ -144,7 +214,7 @@ Panel {
                 height: 64
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                source: root.pet ? root.pet.spriteUrlOf(card.modelData) : ""
+                source: root.pet ? root.pet.spriteUrlOf(cell.modelData) : ""
                 frameWidth: 32
                 frameHeight: 32
                 frameY: Brain.ANIMS.idle.row * 32
@@ -157,37 +227,31 @@ Panel {
 
               Column {
                 anchors.left: preview.right
-                anchors.leftMargin: Style.space(14)
+                anchors.leftMargin: Style.space(10)
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Style.space(4)
 
-                PanelSectionHeader {
-                  text: card.kind.label.toUpperCase() + "'S NAME"
-                  foreground: root.bar.foreground
-                  fontFamily: root.bar.fontFamily
-                }
-
                 TextField {
                   width: parent.width
-                  text: root.store ? root.store[card.kind.nameKey] : ""
+                  text: root.store ? root.store[cell.kind.nameKey] : ""
                   maximumLength: 24
-                  placeholderText: "Give your pet a name"
+                  placeholderText: "Name"
                   foreground: root.bar.foreground
                   font.family: root.bar.fontFamily
-                  onEditingFinished: root.set(card.kind.nameKey, text.trim())
+                  onEditingFinished: root.set(cell.kind.nameKey, text.trim())
+                }
+
+                Dropdown {
+                  width: parent.width
+                  showLabel: false
+                  options: cell.kind.coats
+                  value: root.pet ? root.pet.coatOf(cell.modelData) : ""
+                  foreground: root.bar.foreground
+                  fontFamily: root.bar.fontFamily
+                  onChanged: function(v) { root.set(cell.kind.coatKey, v) }
                 }
               }
-            }
-
-            ButtonGroup {
-              width: parent.width
-              options: card.kind.coats
-              value: root.pet ? root.pet.coatOf(card.modelData) : ""
-              foreground: root.bar.foreground
-              fontFamily: root.bar.fontFamily
-              fontSize: Style.font.bodySmall
-              onChanged: function(v) { root.set(card.kind.coatKey, v) }
             }
           }
         }
@@ -208,129 +272,176 @@ Panel {
             fontFamily: root.bar.fontFamily
             fontSize: Style.font.bodySmall
             onChanged: function(v) { root.set("size", v) }
+            onHovered: function(index, isHovered) { root.over("size", isHovered) }
           }
-          Hint { text: "Sets both. The dog is always one step bigger than the cat." }
         }
 
         Section {
-          title: "ENERGY"
-          PanelSlider {
-            width: parent.width
-            bar: root.bar
-            value: root.store ? root.store.energy : 0.5
-            minimum: 0
-            maximum: 1
-            step: 0.1
-            onReleased: function(v) { root.set("energy", v) }
-          }
+          // The header carries what the time of day is doing to the energy right now.
           Item {
             width: parent.width
-            implicitHeight: lazyLabel.implicitHeight
+            implicitHeight: energyHeader.implicitHeight
+
+            PanelSectionHeader {
+              id: energyHeader
+              text: "ENERGY"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+            }
+            Text {
+              visible: root.store ? root.store.dayCycle : false
+              anchors.right: parent.right
+              anchors.rightMargin: Style.space(6)
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.pet ? Brain.dayPhase(root.pet.hour) : ""
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+          }
+
+          Item {
+            width: parent.width
+            implicitHeight: energySlider.implicitHeight
+
+            HoverHandler { onHoveredChanged: root.over("energy", hovered) }
+
             Text {
               id: lazyLabel
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
               text: "Lazy"
               color: Qt.darker(root.bar.foreground, 1.4)
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.caption
             }
             Text {
+              id: playfulLabel
               anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
               text: "Playful"
               color: Qt.darker(root.bar.foreground, 1.4)
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.caption
             }
-          }
-          Hint {
-            text: "How much they walk and play instead of sleeping, and how often they do things on their own: "
-              + "visits, the dog chasing the cat (not when lazy), zoomies (only near playful). "
-              + "Toys they bring on their own (dog four times a day, cat once) and how often they "
-              + "wander off screen don't depend on it."
+            PanelSlider {
+              id: energySlider
+              anchors.left: lazyLabel.right
+              anchors.leftMargin: Style.space(8)
+              anchors.right: playfulLabel.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              bar: root.bar
+              value: root.store ? root.store.energy : 0.5
+              minimum: 0
+              maximum: 1
+              step: 0.1
+              onReleased: function(v) { root.set("energy", v) }
+            }
           }
         }
 
         PanelSeparator { visible: !!root.store; foreground: root.bar.foreground }
 
-        Column {
+        // ---------- Switches, two by two ----------
+        Grid {
+          id: switches
           visible: !!root.store
           width: parent.width
-          spacing: Style.space(6)
+          columns: 2
+          rowSpacing: Style.space(6)
+          columnSpacing: Style.space(6)
+          readonly property real cellWidth: (width - columnSpacing) / 2
 
           Toggle {
-            width: parent.width
-            label: "Show pets"
-            description: "Hides or shows whoever is picked above. Right-click the bar icon does the same"
-            checked: root.store ? root.store.shown : false
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-            onClicked: root.set("shown", !checked)
-          }
-          Toggle {
-            width: parent.width
-            label: "Follow time of day"
-            description: root.store && root.store.dayCycle && root.pet ? Brain.dayPhase(root.pet.hour)
-              : "Off: energy stays where the slider is, all day. On: lively mornings, sleepy evenings and nights around it"
+            width: switches.cellWidth
+            label: "Time of day"
             checked: root.store ? root.store.dayCycle : false
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily
             onClicked: root.set("dayCycle", !checked)
+            onHovered: function(isHovered) { root.over("dayCycle", isHovered) }
           }
           Toggle {
-            width: parent.width
+            width: switches.cellWidth
             label: "Camera shy"
-            description: "Both run off screen while the screen or a window is shared or recorded, and come back about 15 seconds after it stops"
             checked: root.store ? root.store.cameraShy : false
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily
             onClicked: root.set("cameraShy", !checked)
+            onHovered: function(isHovered) { root.over("cameraShy", isHovered) }
           }
           Toggle {
-            width: parent.width
-            label: "Stalk the pointer"
-            description: "They crouch and pounce at the pointer when it moves near the bottom edge. Off: they ignore it, and a toy they bring is dropped anywhere, not below the pointer"
+            width: switches.cellWidth
+            label: "Stalk pointer"
             checked: root.store ? root.store.chaseMouse : false
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily
             onClicked: root.set("chaseMouse", !checked)
+            onHovered: function(isHovered) { root.over("chaseMouse", isHovered) }
           }
           Toggle {
             visible: root.out.some(function(k) { return Brain.traits({ species: k }).climbs })
-            width: parent.width
-            label: "Cat climbs windows"
-            description: "She climbs a window and peeks over its top edge, on her own and to escape when the dog chases her. Off: she stays on the floor and escapes by running off screen"
+            width: switches.cellWidth
+            label: "Climb windows"
             checked: root.store ? root.store.hangOnWindows : false
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily
             onClicked: root.set("hangOnWindows", !checked)
+            onHovered: function(isHovered) { root.over("hangOnWindows", isHovered) }
           }
         }
 
-        Repeater {
-          model: root.out
+        // ---------- Toys: each under its pet ----------
+        Row {
+          visible: !!root.store
+          width: parent.width
+          spacing: cells.spacing
 
-          Button {
-            required property string modelData
-            width: column.width
-            iconText: String.fromCodePoint(0xF03E9)   // nf-md-paw
-            text: root.species[modelData].toy
-            bordered: true
-            enabled: root.store ? root.store.shown : false
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-            onClicked: if (root.pet) root.pet.giveBall(modelData)
+          Repeater {
+            model: root.out
+
+            Button {
+              required property string modelData
+              width: cells.cellWidth
+              iconText: String.fromCodePoint(0xF03E9)   // nf-md-paw
+              text: root.species[modelData].toy
+              bordered: true
+              enabled: root.store ? root.store.shown : false
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              onClicked: if (root.pet) root.pet.giveBall(modelData)
+              onHovered: function(isHovered) { root.over(modelData + "Toy", isHovered) }
+            }
+          }
+        }
+
+        PanelSeparator { visible: !!root.store; foreground: root.bar.foreground }
+
+        // ---------- What the thing under the pointer does ----------
+        // A fixed five lines, so the panel never changes height as the pointer moves.
+        Text {
+          id: helpLine
+          visible: !!root.store
+          width: parent.width
+          height: Math.ceil(helpMetrics.lineSpacing * 5)
+          wrapMode: Text.WordWrap
+          maximumLineCount: 5
+          elide: Text.ElideRight
+          textFormat: Text.StyledText
+          text: root.helpText
+          color: Qt.darker(root.bar.foreground, 1.4)
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.caption
+
+          FontMetrics {
+            id: helpMetrics
+            font: helpLine.font
           }
         }
       }
     }
-  }
-
-  // A line of small print under a control, saying what it reaches.
-  component Hint: Text {
-    width: parent.width
-    wrapMode: Text.WordWrap
-    color: Qt.darker(root.bar.foreground, 1.4)
-    font.family: root.bar.fontFamily
-    font.pixelSize: Style.font.caption
   }
 
   component Section: Column {
@@ -340,6 +451,7 @@ Panel {
     spacing: Style.space(8)
 
     PanelSectionHeader {
+      visible: parent.title !== ""
       text: parent.title
       foreground: root.bar.foreground
       fontFamily: root.bar.fontFamily

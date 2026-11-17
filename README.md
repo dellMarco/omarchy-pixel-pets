@@ -20,10 +20,11 @@ She hides under fullscreen apps.
 
 ## Settings
 
-Click the cat icon in the bar to open her settings: name, coat (orange, grey, tuxedo, white, cream),
-size, energy (lazy to playful), whether she follows the time of day (lively mornings, sleepy evenings and
-nights), whether she chases the mouse or climbs windows, and a button to give her
-a yarn ball. Right-click the icon to hide or show her. Her name pops up when you pet her.
+Click the icon in the bar to open the settings: which pets are out, a name and coat for each, size,
+energy (lazy to playful), and switches for following the time of day, hiding while the screen is shared,
+stalking the pointer and climbing windows, plus a button for each pet's toy. Point at any of them and
+the line at the bottom says what it does. Right-click the icon to hide or show the pets. A pet's name
+pops up when you pet it.
 
 The **Pets** switch at the top of the settings picks a cat, a dog, or both. Each has its own name and
 coats (dog: golden, shiba, husky, dalmatian, chocolate). A dog stays on the ground: no window climbing.
