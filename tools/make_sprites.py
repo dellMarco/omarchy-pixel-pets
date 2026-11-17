@@ -23,10 +23,17 @@ PALETTE = {
     "Z": (120, 150, 220),  # zzz
     "Y": (125, 175, 235),  # yarn
     "y": (80, 120, 200),   # yarn strands
+    "L": (255, 255, 255),  # speech bubble
+    "D": (58, 58, 78),     # speech bubble and bowl outline
+    "W": (110, 185, 240),  # water
+    "w": (200, 235, 255),  # water shine
+    "K": (214, 74, 74),    # bowl
+    "k": (150, 46, 52),    # bowl shade
+    "C": (160, 100, 50),   # kibble
     "n": (40, 32, 36),     # dog nose
     "c": (214, 60, 70),    # dog collar
     "t": (250, 210, 80),   # collar tag
-    "D": (40, 38, 46),     # dog markings: spots, saddle, mask
+    "M": (40, 38, 46),     # dog markings: spots, saddle, mask
     "b": (220, 214, 204),  # dog light fur on the far side
 }
 
@@ -44,7 +51,7 @@ CAT_COATS = {
     "cream":  {"O": (172, 122, 80), "F": (250, 222, 172), "S": (236, 196, 140), "B": (255, 249, 238)},
 }
 
-# For a dog S is the shade of the fur (ears, far legs), b the shade of B, D its markings,
+# For a dog S is the shade of the fur (ears, far legs), b the shade of B, M its markings,
 # Y/y the tennis ball.
 DOG_BALL = {"Y": (200, 222, 70), "y": (250, 250, 240)}
 DOG_COATS = {
@@ -53,9 +60,9 @@ DOG_COATS = {
     "shiba":     {"O": (128, 62, 28), "F": (222, 126, 54), "S": (182, 92, 38), "B": (255, 240, 214),
                   "b": (226, 200, 166), "style": {"breed": "shiba"}},
     "husky":     {"O": (44, 46, 58), "F": (138, 144, 160), "S": (100, 106, 122), "B": (248, 248, 252),
-                  "b": (200, 202, 212), "D": (70, 74, 90), "E": (90, 170, 235), "style": {"breed": "husky"}},
+                  "b": (200, 202, 212), "M": (70, 74, 90), "E": (90, 170, 235), "style": {"breed": "husky"}},
     "dalmatian": {"O": (110, 110, 126), "F": (250, 250, 252), "S": (206, 206, 216), "B": (255, 255, 255),
-                  "b": (206, 206, 216), "D": (34, 32, 40), "style": {"breed": "dalmatian"}},
+                  "b": (206, 206, 216), "M": (34, 32, 40), "style": {"breed": "dalmatian"}},
     "chocolate": {"O": (52, 30, 20), "F": (118, 72, 46), "S": (86, 48, 30), "B": (176, 128, 92),
                   "E": (24, 14, 12), "n": (24, 14, 12), "c": (60, 170, 170)},
 }
@@ -202,6 +209,8 @@ def head(cx, cy, eye="open"):
             px(g, ex - 1, cy + 1, "E"); px(g, ex, cy, "E"); px(g, ex + 1, cy + 1, "E")
         elif eye == "wide":
             rect(g, min(ex, ex - s), cy, max(ex, ex - s), cy + 1, "E")
+        elif eye == "up":
+            rect(g, ex, cy - 1, ex, cy, "E")
         elif eye in ("left", "right"):
             d = -1 if eye == "left" else 1
             rect(g, ex + d, cy, ex + d, cy + 1, "E")
@@ -489,6 +498,86 @@ def yarn(f):
     return outline(g)
 
 
+def art(g, x0, y0, rows):
+    """Multi-colour stamp: each character is a palette key, '.' is empty."""
+    for dy, row in enumerate(rows):
+        for dx, ch in enumerate(row):
+            if ch != ".":
+                px(g, x0 + dx, y0 + dy, ch)
+
+
+def ask(f):
+    """Sitting, looking up at you, meowing on the second frame."""
+    g = sit(flick=f, eye="up")
+    if f:
+        rect(g, 16, 14, 16, 15, "O")
+    return g
+
+
+def bowl(food, f):
+    """Bowl on the floor in front of her, rim at row 24."""
+    g = grid()
+    top = "CkCCkCCkCCkC" if food else ("WWwWWWWWWwWW" if f % 2 else "WWWWWwWWWWWw")
+    art(g, 17, 24, ("k" + top + "k", "KKKKKKKKKKKKKK", ".KKKKKKKKKKKK.", "..kkkkkkkkkk.."))
+    return outline_with(g, "D")
+
+
+def dine(f, food):
+    """Head down in the bowl: lapping water or munching kibble."""
+    g = grid()
+    tail(g, [(3, 22), (2, 21), (1, 20), (1, 19), (1 + f % 2, 18), (2 + f % 2, 17)])
+    rect(g, 6, 26, 8, 28, "F")
+    rect(g, 10, 26, 11, 28, "S")
+    ellipse(g, 12, 23.5, 8, 4, "F")
+    for y in range(26, S):
+        for x in range(S):
+            if g[y][x] == "F":
+                g[y][x] = "B"
+    g = over(outline(g), head(23, 21 + (f % 2 if food else 0), "closed"))
+    if not food and f % 2:
+        px(g, 23, 24, "N")            # tongue dipping in
+    b = bowl(food, f)
+    for y in range(S):                # the rim's top outline stays behind her face
+        for x in range(S):
+            if b[y][x] and not (b[y][x] == "D" and y < 24 and g[y][x]):
+                g[y][x] = b[y][x]
+    return g
+
+
+def outline_with(g, c):
+    g = outline(g)
+    for y in range(S):
+        for x in range(S):
+            if g[y][x] == "O":
+                g[y][x] = c
+    return g
+
+
+ICONS = {
+    "water": ("...D...", "..DwD..", ".DWwWD.", "DWWwWWD", "DWWWWWD", "DWWWWWD", ".DWWWD.", "..DDD.."),
+    "food":  (".C.C.C.C.", "CCCCCCCCC", "KKKKKKKKK", ".KKKKKKK.", "..kkkkk.."),
+    "break": ("..yyy..", ".yYYYy.", "yYyYyYy", "yYYyYYy", "yYyYyYy", ".yYYYy.", "..yyy.."),
+}
+
+
+def bubble(kind):
+    """Speech bubble in the top-left 16x14, tail at the bottom left pointing at her head."""
+    g = grid()
+    rect(g, 2, 1, 13, 9, "L")
+    rect(g, 1, 2, 14, 8, "L")
+    for x, y in ((3, 10), (2, 11), (2, 10)):
+        px(g, x, y, "L")
+    g = outline_with(g, "D")
+    icon = ICONS[kind]
+    art(g, 8 - (len(icon[0]) + 1) // 2, 5 - len(icon) // 2, icon)
+    return g
+
+
+# The bubbles are the same picture for every pet: drawn in shared palette keys, the "break"
+# one shows each pet's own toy (Y/y).
+BUBBLES = [bubble(k) for k in ("water", "food", "break")]
+
+
 def rows():
     """Every animation drawn in the current STYLE. A dog swaps two poses and adds rows at the end;
     a dog of a breed has its own poses (dog_rows)."""
@@ -512,6 +601,10 @@ def rows():
         ("stretch", [stretch(f) for f in range(3)]),
         ("yawn",   [yawn(f) for f in range(3)]),
         ("yarn",   [yarn(f) for f in range(4)]),
+        ("ask",    [ask(0), ask(1)]),
+        ("drink",  [dine(f, False) for f in range(4)]),
+        ("eat",    [dine(f, True) for f in range(4)]),
+        ("bubble", BUBBLES),
     ]
     if STYLE["face"] == "dog":
         swap = {"crouch": [stretch(1, "happy", 0), stretch(1, "happy", 1)],
@@ -592,29 +685,29 @@ def mark(part, u, v, lx, ly, rx, ry):
     kind = STYLE["breed"]
     if kind == "dalmatian":
         if part == "ear":
-            return "D"
+            return "M"
         for su, sv, rad in SPOTS.get(part, ()):
             if part.startswith(("leg", "arm", "tail")):
                 if abs(lx - su * rx) <= rad and (sv == 0 or abs(v - sv) <= 0.7):
-                    return "D"
+                    return "M"
             elif (lx - su * rx) ** 2 + (ly - sv * ry) ** 2 <= rad * rad:
-                return "D"
+                return "M"
         return "F"
     part = part.rstrip("0123456789")                     # which leg only matters for the spots
     if kind == "husky":                                  # dark hood and saddle, white everywhere else
         if part in ("leg", "arm", "paw", "cheek", "muzzle"):
             return "B"
         if part == "torso":
-            return "D" if v < -0.45 else "B" if v > 0.25 else "F"
+            return "M" if v < -0.45 else "B" if v > 0.25 else "F"
         if part == "front":
-            return "B" if abs(u) < 0.55 and v > -0.45 else "D" if v < -0.6 else "F"
+            return "B" if abs(u) < 0.55 and v > -0.45 else "M" if v < -0.6 else "F"
         if part == "head":                               # a hood down the sides, white brows, a line down the forehead
             hood = v < -0.55 or (abs(u) < 0.13 and v < 0.1) or (abs(u) > 0.62 and v < -0.15)
-            return "D" if hood else "B"
+            return "M" if hood else "B"
         if part == "ear":
-            return "D"
+            return "M"
         if part == "tail":
-            return "D" if v > 0.2 or u > 0.85 else "B"
+            return "M" if v > 0.2 or u > 0.85 else "B"
         return "F"
     if kind == "shiba":                                  # urajiro: cream cheeks, chest, belly, legs
         if part in ("cheek", "muzzle", "paw"):
@@ -797,6 +890,8 @@ def dog_face(cx, cy, eye="open", mouth="pant"):
             px(g, ex - 1, cy + 1 - close, "O"); px(g, ex, cy - close, "O"); px(g, ex + 1, cy + 1 - close, "O")
         elif eye == "wide":
             rect(g, min(ex, ex - s), cy, max(ex, ex - s), cy + 1, "E")
+        elif eye == "up":
+            rect(g, ex, cy - 1, ex, cy, "E")
     g = outline(g)
     if b["ears"] == "drop":
         g = over(g, dog_flaps(cx, cy))
@@ -974,6 +1069,24 @@ def back_dog(f):
     return g
 
 
+def ask_dog(f):
+    """Sitting, looking up at you, a woof on the second frame and the tail going."""
+    return sit_dog(flick=f, eye="up", mouth="open" if f else "shut")
+
+
+def dine_dog(f, food):
+    """Standing with his head down in the bowl: lapping water or crunching kibble."""
+    g = stand_dog(wag=f % 2, eye="closed", mouth="shut", head_at=(23, 21 + (f % 2 if food else 0)))
+    b = bowl(food, f)
+    for y in range(S):                # the rim's top outline stays behind his face
+        for x in range(S):
+            if b[y][x] and not (b[y][x] == "D" and y < 24 and g[y][x]):
+                g[y][x] = b[y][x]
+    if not food and f % 2:
+        px(g, 23, 24, "N")            # tongue in the water
+    return g
+
+
 def dog_rows():
     """The dog's sheet: the cat's rows in the same order, then sniff, bark and belly.
     Dogs don't climb, so the climb and peek rows hold the idle pose to keep the rows lined up."""
@@ -998,6 +1111,10 @@ def dog_rows():
         ("yawn",   [sit_dog(eye="closed", mouth="shut"), sit_dog(eye="closed", mouth="yawn"),
                     sit_dog(eye="closed", mouth="shut")]),
         ("yarn",   [yarn(f) for f in range(4)]),
+        ("ask",    [ask_dog(0), ask_dog(1)]),
+        ("drink",  [dine_dog(f, False) for f in range(4)]),
+        ("eat",    [dine_dog(f, True) for f in range(4)]),
+        ("bubble", BUBBLES),
         ("sniff",  [stand_dog(sniff_lift[f], wag=f % 2, eye="closed", mouth="shut", head_at=(22, 20 + f % 2))
                     for f in range(4)]),
         ("bark",   [stand_dog(mouth="shut"), bark_mark(stand_dog(wag=1, eye="happy", mouth="open", head_at=(21, 13)))]),

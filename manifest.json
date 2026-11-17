@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "skrilexxx.pixel-pets",
   "name": "Pixel Pets",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "author": "skrilexxx",
   "license": "MIT",
-  "description": "A pixel-art cat and dog that live on your desktop: they walk, nap, play with their toys and each other, chase your mouse, and the cat climbs your windows",
+  "description": "A pixel-art cat and dog that live on your desktop: they walk, nap, play with their toys and each other, chase your mouse, climb your windows, and remind you to drink, eat and take breaks",
   "kinds": [
     "service",
     "bar-widget"

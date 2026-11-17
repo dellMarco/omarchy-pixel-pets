@@ -51,6 +51,8 @@ Panel {
     cameraShy: ["Camera shy", "They run off screen while the screen or a window is shared or recorded, and come back about 15 seconds after it stops."],
     chaseMouse: ["Stalk the pointer", "They crouch and pounce at the pointer when it moves near the bottom edge. Off: they ignore it, and a toy they bring is dropped anywhere, not below the pointer."],
     hangOnWindows: ["Cat climbs windows", "She climbs windows, on her own and to escape the dog: onto the top to walk, sit and nap if there is room above, else up behind it to peek over. Off: she stays on the floor and escapes off screen."],
+    reminders: ["Care reminders", "On a timer a pet sits with a speech bubble asking for water, food or a break; with both out they take turns. Click it to serve: it drinks, eats, or gets its toy. Ignored for five minutes, it comes over to the pointer."],
+    intervals: ["How often", "How long after the last water, food or break the next reminder comes. Being away from the desk for five minutes starts all three again."],
     catToy: ["Give yarn ball", "Double-clicking her does the same. She chases and bats it around; you can drag and throw it. Hold it up high for five seconds and she gets the zoomies. Giving it calls her back if she is off screen."],
     dogToy: ["Throw tennis ball", "Double-clicking him does the same. He fetches it back to where it was thrown from and barks for more. Hold it up high for five seconds and he gets the zoomies. Throwing it calls him back if he is off screen."]
   })
@@ -390,6 +392,27 @@ Panel {
             onClicked: root.set("hangOnWindows", !checked)
             onHovered: function(isHovered) { root.over("hangOnWindows", isHovered) }
           }
+          Toggle {
+            width: switches.cellWidth
+            label: "Reminders"
+            checked: root.store ? root.store.reminders : false
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            onClicked: root.set("reminders", !checked)
+            onHovered: function(isHovered) { root.over("reminders", isHovered) }
+          }
+        }
+
+        // ---------- How often each reminder comes; shown while reminders are on ----------
+        Row {
+          id: intervals
+          visible: !!root.store && root.store.reminders
+          width: parent.width
+          spacing: Style.space(6)
+
+          Interval { title: "Water"; key: "waterMinutes"; choices: [30, 45, 60] }
+          Interval { title: "Food"; key: "foodMinutes"; choices: [180, 240, 300] }
+          Interval { title: "Break"; key: "breakMinutes"; choices: [45, 60, 90] }
         }
 
         // ---------- Toys: each under its pet ----------
@@ -441,6 +464,21 @@ Panel {
         }
       }
     }
+  }
+
+  // How often one reminder comes, in minutes: a third of the row.
+  component Interval: Dropdown {
+    property string title: ""
+    property string key: ""
+    property var choices: []
+    width: (intervals.width - 2 * intervals.spacing) / 3
+    label: title
+    options: choices.map(m => ({ value: String(m), label: m % 60 ? m + " min" : m / 60 + " h" }))
+    value: root.store ? String(root.store[key]) : ""
+    foreground: root.bar.foreground
+    fontFamily: root.bar.fontFamily
+    onChanged: function(v) { root.set(key, Number(v)) }
+    onHovered: function(isHovered) { root.over("intervals", isHovered) }
   }
 
   component Section: Column {

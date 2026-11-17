@@ -20,11 +20,20 @@ Between all that she grooms, yawns, and stretches after naps.
 
 She hides under fullscreen apps.
 
+## Care reminders
+
+She can remind you to look after yourself. Every so often she sits down with a speech bubble asking for
+**water**, **food** or a **break** (the yarn ball). Click her to give it: she drinks or eats from a bowl, or
+the ball drops out for a play break. Ignore her for five minutes and she comes over to your mouse with the
+bubble bouncing. Timers start over when you come back after being away (idle, locked or asleep) for five
+minutes or more. The dog does the same; with both out they take turns.
+
 ## Settings
 
 Click the icon in the bar to open the settings: which pets are out, a name and coat for each, size,
 energy (lazy to playful), and switches for following the time of day, hiding while the screen is shared,
-stalking the pointer and climbing windows, plus a button for each pet's toy. Point at any of them and
+stalking the pointer, climbing windows and care reminders (with how often water, food and a break
+come), plus a button for each pet's toy. Point at any of them and
 the line at the bottom says what it does. Right-click the icon to hide or show the pets. A pet's name
 pops up when you pet it.
 

@@ -20,9 +20,9 @@
 // to where it was thrown from, sniffs along the floor, barks and chases his tail.
 var TRAITS = {
   // away: the share of the time spent off screen. The cat roams far more than the dog.
-  // asks: times a day it brings its toy unasked.
-  cat: { climbs: true, fetches: false, away: 0.5, asks: 1 },
-  dog: { climbs: false, fetches: true, away: 0.2, asks: 4 }
+  // offers: times a day it brings its toy unasked.
+  cat: { climbs: true, fetches: false, away: 0.5, offers: 1 },
+  dog: { climbs: false, fetches: true, away: 0.2, offers: 4 }
 }
 function traits(b) {
   return TRAITS[b.species] || TRAITS.cat
@@ -49,6 +49,10 @@ var ANIMS = {
   groom:   { row: 12, frames: 4, fps: 4 },
   stretch: { row: 13, frames: 3, fps: 2 },
   yawn:    { row: 14, frames: 3, fps: 2 },
+  // Care reminders: asking for something, and having it.
+  ask:     { row: 16, frames: 2, fps: 2 },
+  drink:   { row: 17, frames: 4, fps: 4 },
+  eat:     { row: 18, frames: 4, fps: 4 },
   // Wandering off the edge of the screen and coming back.
   leave:   { row: 1, frames: 6, fps: 10 },
   away:    { row: 0, frames: 4, fps: 3 },
@@ -60,16 +64,18 @@ var ANIMS = {
   zoom:    { row: 1, frames: 6, fps: 20 },
   greet:   { row: 1, frames: 6, fps: 16 },
   chase:   { row: 1, frames: 6, fps: 16 },
-  // Dog only from here. Rows 16 and up exist only on the dog sheets.
+  // Dog only from here. Rows 20 and up exist only on the dog sheets.
   invite:  { row: 9, frames: 2, fps: 6 },   // play bow: at the cat, or after bringing the ball
-  belly:   { row: 18, frames: 2, fps: 6 },  // on his back for a belly rub
+  belly:   { row: 22, frames: 2, fps: 6 },  // on his back for a belly rub
   carry:   { row: 1, frames: 6, fps: 14 },
   spin:    { row: 1, frames: 6, fps: 16 },
-  sniff:   { row: 16, frames: 4, fps: 6 },
-  bark:    { row: 17, frames: 2, fps: 5 }
+  sniff:   { row: 20, frames: 4, fps: 6 },
+  bark:    { row: 21, frames: 2, fps: 5 }
 }
 var YARN_ROW = 15
 var YARN_FRAMES = 4
+var BUBBLE_ROW = 19   // speech bubble frames: water, food, break
+var BUBBLES = { water: 0, food: 1, break: 2 }
 
 var SPEED = 60          // px/s walking
 var RUN_SPEED = 150     // px/s chasing the ball
@@ -102,8 +108,8 @@ var OFFSCREEN = { leave: true, away: true, enter: true, flee: true }
 
 var CHASE_SHARE = 0.3   // of the dog's visits, when he is lively enough, turn into a chase
 var CHASE_ENERGY = 0.35 // below this he can't be bothered
-var ASK_HOURS = [9, 21] // the toy is brought unasked between these hours
-var ASK_OPEN = 0.75     // hours such a moment stays open if she can't right then
+var OFFER_HOURS = [9, 21] // the toy is brought unasked between these hours
+var OFFER_OPEN = 0.75     // hours such a moment stays open if she can't right then
 var ZOOM_ENERGY = 0.7   // zoomies only above this
 // Holding a pet's toy up high winds it up: after a few seconds it can't hold still any longer.
 var TEASE_ABOVE = 1 / 3 // of the screen height, from the top
@@ -112,7 +118,7 @@ var PET_WINDOW = 4      // s within which pets count as "again"
 var PET_GAP = 0.35      // s: a click sooner than this after the last one is not another pet
 var CAT_PATIENCE = 3    // pets in a row a cat enjoys, at least (up to two more, and two more when sleepy)
 var DOG_BELLY = 5       // pets in a row, give or take one, and he rolls over
-var CALM = 240          // s at least between two startles
+var STARTLE_REST = 240  // s at least between two startles
 
 // Two pets out together: share of idle decisions, at full energy, that go and see the other one.
 var MEET_CHANCE = 0.1
@@ -130,6 +136,8 @@ var BALL_LIFE = 40      // s before the yarn ball goes away
 var BALL_BOUNCE = 0.45
 var BALL_FRICTION = 1.5 // rolling slowdown per second on the floor
 
+var NAG_AFTER = 300     // s of asking before she comes over to the mouse
+
 // Modes in which something interesting (ball, mouse) can catch her attention.
 var REACTIVE = { idle: true, sit: true, walk: true, run: true, groom: true, yawn: true, sniff: true }
 // The trip up a window and back: climb the front (back to the viewer), go over the top edge,
@@ -145,31 +153,44 @@ function create(x, y) {
     visiting: false, then: null,
     stay: null, onFor: 0,   // s left before wandering off; s on screen since she came back
     perch: null, perchY: 0, perchFor: 0, onTop: false,   // the window she is on, by id; onTop: this climb goes over the top, in full view
-    pending: false, laps: 0, askDay: null, askAt: [], askDone: [],
+    pending: false, laps: 0, offerDay: null, offerAt: [], offerDone: [],
     pets: 0, petT: Infinity, patience: null, grumpy: 0, calm: 0,
     dream: null, dreamAt: null, settled: false,
     // What the last tick knew, for the calls that come without bounds (pet).
     species: "cat", energy: 0.5, w: 0,
-    clipTop: -Infinity, clipBottom: Infinity
+    clipTop: -Infinity, clipBottom: Infinity,
+    want: null, nag: false   // care reminder: "water" | "food" | "break"
   }
 }
 
-// Modes in which she holds still: only the sprite animates, nothing moves across the screen.
-var STILL = { idle: true, sit: true, sleep: true, groom: true, yawn: true, stretch: true, petted: true,
-              bark: true, invite: true, belly: true }
+// How often Service.qml should tick her, in ms. Full rate only while something moves;
+// the sprite animates on its own, so a still pet only needs to notice things.
+var STILL = { idle: true, sit: true, groom: true, yawn: true, stretch: true, petted: true, peek: true, held: true,
+              ask: true, drink: true, eat: true, bark: true, invite: true, belly: true }
+// Walking paces: 3px a step is one sprite pixel at medium size.
+var STROLL = { walk: true, sniff: true, leave: true, enter: true }
+function tickInterval(mode, hasBall) {
+  if (hasBall) return 33
+  if (mode === "sleep" || mode === "away") return 1000
+  if (STROLL[mode]) return 50
+  return STILL[mode] ? 250 : 33
+}
 
-// How closely she needs watching, so Service.qml can tick no faster than it has to:
-// 2 on the move (she, or her toy), 1 holding still, 0 off screen with nothing of hers in sight.
-function tempo(s) {
+// A toy only counts as "in play" for the tick rate while it is in a hand, in a mouth or moving;
+// one lying still needs no more attention than its pet does.
+function toyInPlay(s) {
   var o = s.ball
-  if (o && (o.held || o.carried || o.vx * o.vx + o.vy * o.vy > 1)) return 2
-  if (s.mode === "away") return o ? 1 : 0
-  return STILL[s.mode] ? 1 : 2
+  return !!o && (o.held || o.carried || o.vx * o.vx + o.vy * o.vy > 1)
+}
+
+// Off screen with nothing of hers left in sight: the window isn't needed on her account.
+function gone(s) {
+  return s.mode === "away" && !s.ball
 }
 
 // Whether Service.qml needs to keep the mouse position fresh.
 function watchesCursor(mode) {
-  return !!REACTIVE[mode] || mode === "crouch" || mode === "pounce"
+  return !!REACTIVE[mode] || mode === "crouch" || mode === "pounce" || mode === "ask"
 }
 
 // Roughly x: 70% to 130% of it, so nothing takes the same time twice.
@@ -336,37 +357,37 @@ function yawnTogether(s, f, rand) {
 // When today a species brings its toy unasked: the hours are split into as many equal parts as
 // there are asks, with one moment at random in each. Random per day and species but the same
 // all day, so a shell restart doesn't deal new ones.
-function askTimes(day, species) {
-  var n = traits({ species: species }).asks, out = []
+function offerTimes(day, species) {
+  var n = traits({ species: species }).offers, out = []
   var x = (Math.abs(day) * 131 + (species === "dog" ? 7 : 3)) % 2147483646 + 1
-  var span = (ASK_HOURS[1] - ASK_HOURS[0]) / n
+  var span = (OFFER_HOURS[1] - OFFER_HOURS[0]) / n
   for (var i = 0; i < n; i++) {
     for (var k = 0; k < 3; k++) x = (x * 48271) % 2147483647
-    out.push(ASK_HOURS[0] + span * (i + x / 2147483647))
+    out.push(OFFER_HOURS[0] + span * (i + x / 2147483647))
   }
   return out
 }
 
 // Which of today's moments is open right now and not yet used, or -1.
-function askDue(s, b) {
+function offerDue(s, b) {
   if (b.day === undefined || b.hour === undefined) return -1
-  if (s.askDay !== b.day) {
-    s.askDay = b.day
-    s.askAt = askTimes(b.day, b.species)
-    s.askDone = []
+  if (s.offerDay !== b.day) {
+    s.offerDay = b.day
+    s.offerAt = offerTimes(b.day, b.species)
+    s.offerDone = []
   }
-  for (var i = 0; i < s.askAt.length; i++)
-    if (!s.askDone[i] && b.hour >= s.askAt[i] && b.hour < s.askAt[i] + ASK_OPEN) return i
+  for (var i = 0; i < s.offerAt.length; i++)
+    if (!s.offerDone[i] && b.hour >= s.offerAt[i] && b.hour < s.offerAt[i] + OFFER_OPEN) return i
   return -1
 }
 
 // Brings a toy unasked. The dog carries his ball to below the pointer (delivering it does the
 // rest); the cat nudges her yarn that way with a paw.
-function ask(s, b, rand) {
+function offer(s, b, rand) {
   var cx = b.cursor ? b.cursor.x : (b.w + b.size) * (0.3 + 0.4 * rand())
   if (traits(b).fetches) {
     s.ball = { x: s.x, y: s.y, vx: 0, vy: 0, roll: 0, life: BALL_LIFE, held: false,
-               carried: true, fetched: false, home: cx, asked: true }
+               carried: true, fetched: false, home: cx, offered: true }
     walkTo(s, Math.max(0, Math.min(b.w, cx - b.size / 2)), "carry")
     return
   }
@@ -458,9 +479,14 @@ function next(s, b, rand) {
     var near = friend(b)
     return near && Math.abs(near.x - s.x) < Math.max(b.size, b.friendSize || 0) * 1.5 ? meet(s, near, b, rand) : setMode(s, "idle", 1)
   }
-  if (m === "leave") return setMode(s, "away", b.hide ? 3 : s.awayFor)
+  if (m === "drink" || m === "eat") return setMode(s, "petted", 1.5)
+  if (m === "leave") return setMode(s, "away", b.hide ? 3 : s.want ? 0 : s.awayFor)
   if (m === "away") {
     if (b.hide) return setMode(s, "away", 3)   // still being shared: look again in a moment
+    if (s.want) {   // something to ask for: straight back in
+      s.stay = STAY_MIN + rand() * STAY_SPAN
+      return comeBack(s, b, 0, rand())
+    }
     // Each keeps its own hours: not back in on the other's heels.
     if (b.friend && b.friend.mode === "enter") return setMode(s, "away", 20 + rand() * 60)
     s.stay = STAY_MIN + rand() * STAY_SPAN
@@ -477,6 +503,11 @@ function next(s, b, rand) {
     return
   }
   if (m === "flee") return setMode(s, "away", 6 + rand() * 8)   // strolls back in as if nothing happened
+  if (s.want && s.goal === null) {
+    if (m !== "ask") return setMode(s, "ask", NAG_AFTER)
+    s.nag = true   // ignored for a while: go over to the mouse and ask there
+    return walkTo(s, b.cursor ? Math.max(0, Math.min(b.w, b.cursor.x - b.size / 2)) : rand() * b.w)
+  }
   if (m === "greet") return setMode(s, "petted", about(2, rand))
   if (m === "zoom") {
     if (--s.laps > 0) return walkTo(s, s.x < b.w / 2 ? b.w * 0.95 : b.w * 0.05, "zoom")
@@ -490,10 +521,10 @@ function next(s, b, rand) {
     var top = perched(s, b)
     return top ? perchNext(s, b, top, rand) : drop(s)
   }
-  var due = s.ball ? -1 : askDue(s, b)
+  var due = s.ball ? -1 : offerDue(s, b)
   if (due >= 0) {
-    s.askDone[due] = true
-    return ask(s, b, rand)
+    s.offerDone[due] = true
+    return offer(s, b, rand)
   }
   if (s.stay <= 0) {
     // Nor out right behind the other: if it has just gone, hang about a little longer.
@@ -546,7 +577,7 @@ function next(s, b, rand) {
 
 // Ball first, then the mouse. May switch her into run / bat / crouch.
 function distract(s, b, rand, dt) {
-  if (!REACTIVE[s.mode] || s.goal !== null || s.perch !== null) return
+  if (!REACTIVE[s.mode] || s.goal !== null || s.perch !== null || s.want) return
   var o = s.ball
   // A ball he already brought back lies there until it is thrown again.
   if (o && !o.fetched) {
@@ -703,7 +734,7 @@ function tick(s, dt, b, rand) {
     s.t += dt
     if (b.hide && !OFFSCREEN[s.mode]) leave(s, b, rand)   // screen is being shared: out of sight
     // Time to bring the toy: that gets her up from a nap, or back from a wander.
-    if (!b.hide && !b.exhausted && !s.settled && !s.ball && !top && askDue(s, b) >= 0) {
+    if (!b.hide && !b.exhausted && !s.settled && !s.ball && !top && !s.want && offerDue(s, b) >= 0) {
       if (s.mode === "away") callBack(s, b, rand)
       else if (s.mode === "sleep") setMode(s, "stretch", 1.5)
     }
@@ -809,8 +840,8 @@ function deliver(s, rand) {
   o.fetched = true
   o.vx = s.dir * 60
   o.vy = -120
-  var wait = o.asked ? { mode: "sit", duration: about(8, rand), then: { mode: "sleep", duration: about(25, rand) } } : null
-  o.asked = false
+  var wait = o.offered ? { mode: "sit", duration: about(8, rand), then: { mode: "sleep", duration: about(25, rand) } } : null
+  o.offered = false
   // Mostly a bow and a bark; sometimes just one of the two.
   var r = rand()
   var bark = { mode: "bark", duration: about(0.8, rand), then: wait }
@@ -819,11 +850,39 @@ function deliver(s, rand) {
   s.then = r < 0.8 ? bark : wait
 }
 
-// A click on her. A cat enjoys a few pets in a row, then swats the pointer, walks off and for a
-// while only flicks her tail at a click. A dog never has enough and rolls over for a belly rub.
-// How many pets that takes is drawn anew for every streak.
-function pet(s, rand) {
+// Floor modes she can drop to come and ask for something.
+var CALM = { idle: true, sit: true, walk: true, run: true, groom: true, yawn: true, sleep: true, stretch: true, petted: true }
+
+// A care reminder (or null to cancel). She asks as soon as she's free.
+function want(s, kind) {
+  s.want = kind
+  s.nag = false
+  if (kind && CALM[s.mode]) {
+    s.goal = null
+    setMode(s, "ask", NAG_AFTER)
+  } else if (kind && s.mode === "away") s.until = 0   // off screen: cut the trip short and come ask
+  else if (!kind && s.mode === "ask") setMode(s, "idle", 1)
+}
+
+// A click on her. If she is asking for something, that serves it. Otherwise it is a pet: a cat
+// enjoys a few in a row, then swats the pointer, walks off and for a while only flicks her tail
+// at a click; a dog never has enough and rolls over for a belly rub. How many pets that takes
+// is drawn anew for every streak.
+function pet(s, b, rand) {
   rand = rand || Math.random
+  if (s.want && !ON_LEDGE[s.mode] && s.mode !== "held" && s.mode !== "fall" && s.mode !== "pounce"
+      && !OFFSCREEN[s.mode]) {
+    var w = s.want
+    s.want = null
+    s.nag = false
+    if (w === "water") setMode(s, "drink", 4)
+    else if (w === "food") setMode(s, "eat", 5)
+    else {
+      setMode(s, "idle", 0.5)
+      if (b) spawnBall(s, b, rand)
+    }
+    return
+  }
   if (s.mode === "peekup" || s.mode === "peek") return setMode(s, "peekdown", Infinity)   // ducks
   if (ON_LEDGE[s.mode] || s.mode === "held" || s.mode === "fall" || s.mode === "away") return
   // Hammering isn't petting, and a double-click (which gives the toy) is not two pets:
@@ -862,7 +921,7 @@ function pet(s, rand) {
 // the dog barks at it. More likely the livelier she is, and not again for a few minutes.
 function startle(s, b, rand) {
   if (!REACTIVE[s.mode] || s.goal !== null || s.perch !== null || s.calm > 0 || rand() > 0.2 + 0.6 * s.energy) return
-  s.calm = CALM + rand() * CALM
+  s.calm = STARTLE_REST + rand() * STARTLE_REST
   // Mostly the dog barks and the cat hops and scurries off; now and then he jumps and she just hops.
   var hops = traits(b).fetches ? rand() < 0.3 : true
   if (!hops) return setMode(s, "bark", about(1.5, rand))

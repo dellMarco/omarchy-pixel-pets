@@ -38,7 +38,38 @@ Item {
     running: true
     repeat: true
     triggeredOnStart: true
-    onTriggered: root.updateHour()
+    onTriggered: { root.updateHour(); root.remind() }
+  }
+
+  // Care reminders: when a need is overdue a pet sits and asks for it until you click it.
+  // With both out they take turns.
+  property var lastServed: ({ water: Date.now(), food: Date.now(), break: Date.now() })
+  property int asker: 0
+  function remind() {
+    if (!store.reminders || !store.shown || idle.isIdle) return
+    var out = win.views.filter(v => v.active && v.brain)
+    if (!out.length || out.some(v => v.brain.want)) return
+    var mins = { water: store.waterMinutes, food: store.foodMinutes, break: store.breakMinutes }
+    var now = Date.now(), due = null, most = 0
+    for (var k in mins) {
+      var over = now - lastServed[k] - mins[k] * 60000
+      if (over >= 0 && over >= most) { due = k; most = over }
+    }
+    if (!due) return
+    asker = (asker + 1) % out.length
+    win.hurry()
+    Brain.want(out[asker].brain, due)
+  }
+  function forget() {
+    var now = Date.now()
+    lastServed = { water: now, food: now, break: now }
+    win.each(brain => Brain.want(brain, null))
+  }
+  // Away for 5+ minutes (idle, locked, asleep): start counting again from when you're back.
+  IdleMonitor {
+    id: idle
+    timeout: 300
+    onIsIdleChanged: if (!isIdle) root.forget()
   }
 
   // ---------- What the pets notice about the desktop ----------
@@ -116,6 +147,11 @@ Item {
       property bool hangOnWindows: true
       property bool dayCycle: true
       property bool cameraShy: true
+      property bool reminders: true
+      property int waterMinutes: 45
+      property int foodMinutes: 240
+      property int breakMinutes: 60
+      onRemindersChanged: if (!reminders) root.forget()
     }
   }
 
@@ -131,11 +167,15 @@ Item {
     onWidthChanged: if (width > 0) fullWidth = width
     onHeightChanged: if (height > 0) fullHeight = height
 
-    // How closely the pets need watching right now (Brain.tempo): 2 something moves, 1 all hold
-    // still, 0 all off screen. It sets how often they are ticked and whether the window is up.
+    // How often the pets are ticked, in ms: as often as the one who needs it most (Brain.tickInterval),
+    // and whether any of them is on screen at all; with nobody there the window is taken down.
     // Anything done to a pet from outside the tick calls hurry(), so the answer shows at once.
-    property int tempo: 2
-    function hurry() { tempo = 2 }
+    property int pace: 33
+    property bool present: true
+    function hurry() {
+      pace = 33
+      present = true
+    }
 
     // What a pet's brain gets to know about the world, built fresh for each tick.
     function boundsFor(view) {
@@ -256,7 +296,7 @@ Item {
       function onRawEvent(event) {
         // Events come in bursts (a title changes on every keystroke in some apps); one fresh
         // window list after the burst is enough, and none is needed while nobody is on screen.
-        if (store.shown && win.tempo > 0) toplevelsSoon.restart()
+        if (store.shown && win.present) toplevelsSoon.restart()
         var data = String(event.data || "")
         var name = String(event.name)
         if (name === "workspace" || name === "workspacev2" || name === "focusedmon" || name === "focusedmonv2"
@@ -291,14 +331,14 @@ Item {
     }
     Timer {
       interval: 1000
-      running: store.shown && win.tempo > 0
+      running: store.shown && win.present
       repeat: true
       triggeredOnStart: true
       onTriggered: { Hyprland.refreshToplevels(); win.refreshLedges() }
     }
 
     // Down while every pet is off screen: an empty full-screen layer is still a surface to keep.
-    visible: store.shown && tempo > 0
+    visible: store.shown && present
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
@@ -323,12 +363,11 @@ Item {
       Region { item: dogView.toy }
     }
 
-    // 20 times a second while something moves, 5 while all hold still (only sprites animate then,
-    // on their own clock), once a second while everyone is off screen.
+    // Ticked as fast as the pet that needs it most; sprites animate on their own clock.
     property real tickedAt: 0
     property real ledgesAt: 0
     Timer {
-      interval: win.tempo === 2 ? 50 : win.tempo === 1 ? 200 : 1000
+      interval: win.pace
       running: store.shown && win.fullWidth > 0 && win.fullHeight > 0
       repeat: true
       onTriggered: {
@@ -350,7 +389,7 @@ Item {
           win.ledgesAt = now
           win.refreshLedges()
         }
-        var tempo = 0, nth = 0
+        var pace = 1000, present = false, nth = 0
         for (var j = 0; j < views.length; j++) {
           var view = views[j]
           if (!view.active) continue
@@ -360,9 +399,11 @@ Item {
           nth++
           Brain.tick(view.brain, dt, b, Math.random)
           view.sync()
-          tempo = Math.max(tempo, Brain.tempo(view.brain))
+          pace = Math.min(pace, Brain.tickInterval(view.brain.mode, Brain.toyInPlay(view.brain)))
+          if (!Brain.gone(view.brain)) present = true
         }
-        win.tempo = tempo
+        win.pace = pace
+        win.present = present
       }
     }
 
@@ -398,6 +439,8 @@ Item {
       pet.y = Math.round(brain.y)
       pet.dir = brain.dir
       pet.mode = brain.mode
+      pet.want = brain.want || ""
+      pet.nag = brain.nag
       // On a window, the top edge hides whatever part of her is on the far side of it.
       var top = Math.max(0, Math.min(view.size, Math.round(brain.clipTop - brain.y)))
       var bottom = Math.max(top, Math.min(view.size, Math.round(brain.clipBottom - brain.y)))
@@ -416,6 +459,8 @@ Item {
       id: pet
 
       property string mode: "idle"
+      property string want: ""
+      property bool nag: false
       property int dir: 1
       property int shownTop: 0
       property int shownHeight: view.size
@@ -437,23 +482,34 @@ Item {
           NumberAnimation { duration: 600; easing.type: Easing.InOutQuad }
         }
 
-        AnimatedSprite {
+        // The whole sheet, slid behind a one-frame window. Not AnimatedSprite: that one makes
+        // Qt redraw this full-screen layer every vsync; this only repaints when the frame changes.
+        Item {
           y: -pet.shownTop
           width: view.size
           height: view.size
-          source: view.spriteUrl
-          frameWidth: 32
-          frameHeight: 32
-          frameX: 0
-          frameY: pet.anim.row * 32
-          frameCount: pet.anim.frames
-          // With music on, a sitting pet's tail keeps a quicker beat.
-          frameRate: pet.mode === "sit" && root.music ? pet.anim.fps * 2.5 : pet.anim.fps
-          running: pet.mode !== "away"   // nobody to see it
-          interpolate: false
-          smooth: false
+          clip: true
           transform: Scale { origin.x: view.size / 2; xScale: pet.dir }
+
+          Image {
+            x: -pet.frame * view.size
+            y: -pet.anim.row * view.size
+            width: implicitWidth * view.px
+            height: implicitHeight * view.px
+            source: view.spriteUrl
+            smooth: false
+          }
         }
+      }
+
+      property int frame: 0
+      onModeChanged: frame = 0
+      Timer {
+        // With music on, a sitting pet's tail keeps a quicker beat.
+        interval: 1000 / (pet.anim.fps * (pet.mode === "sit" && root.music ? 2.5 : 1))
+        running: store.shown && view.active && pet.mode !== "away"   // nobody sees her off screen
+        repeat: true
+        onTriggered: pet.frame = (pet.frame + 1) % pet.anim.frames
       }
 
       MouseArea {
@@ -477,8 +533,10 @@ Item {
         onReleased: {
           if (!view.brain) return
           root.hurry()
+          var w = view.brain.want
           if (view.brain.mode === "held") Brain.drop(view.brain)
-          else Brain.pet(view.brain)
+          else Brain.pet(view.brain, win.boundsFor(view))
+          if (w && !view.brain.want) root.lastServed[w] = Date.now()
           view.sync()
         }
         onDoubleClicked: root.giveBall(view.species)
@@ -509,7 +567,7 @@ Item {
 
     // Thought bubble over a dreaming pet's head. Not in the input mask either.
     Rectangle {
-      id: bubble
+      id: dreamBubble
       readonly property bool ofFriend: view.dream === "friend"
       visible: view.dream !== ""
       x: Math.round(pet.x + (pet.dir > 0 ? 0.62 : 0.38) * view.size - width / 2)
@@ -526,8 +584,8 @@ Item {
         width: 12 * view.px
         height: width
         // The other pet, sitting, or her own toy.
-        source: bubble.ofFriend ? root.spriteUrlOf(view.species === "dog" ? "cat" : "dog") : view.spriteUrl
-        sourceClipRect: bubble.ofFriend ? Qt.rect(0, Brain.ANIMS.sit.row * 32, 32, 32) : Qt.rect(0, Brain.YARN_ROW * 32, 12, 12)
+        source: dreamBubble.ofFriend ? root.spriteUrlOf(view.species === "dog" ? "cat" : "dog") : view.spriteUrl
+        sourceClipRect: dreamBubble.ofFriend ? Qt.rect(0, Brain.ANIMS.sit.row * 32, 32, 32) : Qt.rect(0, Brain.YARN_ROW * 32, 12, 12)
         smooth: false
       }
       Rectangle {
@@ -539,6 +597,34 @@ Item {
         color: parent.color
         border.color: parent.border.color
         border.width: 1
+      }
+    }
+
+    // Speech bubble by her head while she asks for something; bounces once she has been ignored.
+    // Not in the input mask: clicking her is how you serve it.
+    Item {
+      id: bubble
+      property int bob: 0
+      visible: pet.want !== "" && (pet.mode === "ask" || pet.mode === "walk")
+      width: 16 * view.px
+      height: 14 * view.px
+      x: pet.dir > 0 ? pet.x + 21 * view.px : pet.x + view.size - 37 * view.px
+      y: pet.y - (9 + bob) * view.px
+      transform: Scale { origin.x: bubble.width / 2; xScale: pet.dir }
+
+      Image {
+        anchors.fill: parent
+        source: view.spriteUrl
+        sourceClipRect: Qt.rect((Brain.BUBBLES[pet.want] || 0) * 32, Brain.BUBBLE_ROW * 32, 16, 14)
+        smooth: false
+      }
+
+      Timer {
+        interval: 333
+        running: bubble.visible && pet.nag
+        repeat: true
+        onTriggered: bubble.bob = 1 - bubble.bob
+        onRunningChanged: if (!running) bubble.bob = 0
       }
     }
 

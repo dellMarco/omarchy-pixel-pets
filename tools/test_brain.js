@@ -118,6 +118,76 @@ assert(bats >= 3, "batted the ball only " + bats + " times")
 assert.strictEqual(k.ball, null, "ball should go away after a while")
 assert.notStrictEqual(k.mode, "run", "stops chasing once the ball is gone")
 
+// Adaptive tick rate: slow while still, full rate while moving, and the pet still lives a normal life
+assert.strictEqual(B.tickInterval("run", false), 33)
+assert.strictEqual(B.tickInterval("climb", false), 33)
+assert.strictEqual(B.tickInterval("sleep", true), 33, "a ball in play always gets the full rate")
+assert(B.tickInterval("sleep", false) > B.tickInterval("sit", false) && B.tickInterval("sit", false) > 33)
+const ab = { ...cb, ledges: [win], ballSize: 36 }
+const a = B.create(500, ab.floor)
+const seenA = new Set()
+let simulated = 0, ticks = 0
+while (simulated < 30 * 60) {
+  const dt = B.tickInterval(a.mode, !!a.ball) / 1000
+  B.tick(a, dt, ab, rand)
+  simulated += dt; ticks++
+  seenA.add(a.mode)
+  assert(B.OFFSCREEN[a.mode] || (a.x >= 0 && a.x <= ab.w))
+  if (!B.ON_LEDGE[a.mode] && a.mode !== "fall") assert.strictEqual(a.y, ab.floor)
+}
+for (const m of ["idle", "walk", "sit", "sleep", "climb", "peek", "descend"]) assert(seenA.has(m), "adaptive: never entered " + m)
+assert(ticks / simulated < 18, "should tick well under 30/s on average, did " + (ticks / simulated).toFixed(1) + "/s")
+
+// Care reminders: she sits and asks, ignores the mouse meanwhile, and a click serves it
+const tick30 = (c, bb, n) => { for (let i = 0; i < n; i++) { B.tick(c, 1 / 30, bb, rand); assert(B.ANIMS[c.mode], "no animation for " + c.mode) } }
+const rb = { ...cb, ledges: [], ballSize: 36, cursor: { x: 1500, y: cb.floor + 40 } }
+const r = B.create(300, rb.floor)
+B.want(r, "water")
+assert.strictEqual(r.mode, "ask")
+for (let i = 0; i < 30 * 200; i++) {   // a wiggling mouse right next to her doesn't distract her
+  rb.cursor = { x: r.x + 60 + (i % 2) * 20, y: rb.floor + 40 }
+  B.tick(r, 1 / 30, rb, rand)
+  assert.strictEqual(r.mode, "ask", "keeps asking, was " + r.mode)
+}
+B.pet(r, rb)
+assert.strictEqual(r.mode, "drink")
+assert.strictEqual(r.want, null)
+tick30(r, rb, 30 * 4.1)
+assert.strictEqual(r.mode, "petted", "happy after a drink")
+B.want(r, "food"); B.pet(r, rb)
+assert.strictEqual(r.mode, "eat")
+B.want(r, "break"); B.pet(r, rb)
+assert(r.ball && r.want === null, "a break brings out the ball")
+tick30(r, rb, 30 * 3)
+assert.strictEqual(r.mode, "run", "and she plays with it")
+B.want(r, null)
+
+// Ignored for NAG_AFTER: she walks over to the mouse, bubble bouncing, and asks there
+const n = B.create(100, rb.floor)
+rb.cursor = { x: 1200, y: rb.floor + 40 }
+B.want(n, "food")
+tick30(n, rb, 30 * (B.NAG_AFTER + 1))
+assert(n.nag && n.mode === "walk", "goes to nag, was " + n.mode)
+for (let i = 0; i < 30 * 30; i++) {   // the mouse wiggles; she's on a mission, not hunting
+  rb.cursor = { x: 1200 + (i % 2) * 10, y: rb.floor + 40 }
+  B.tick(n, 1 / 30, rb, rand)
+  assert(n.mode === "walk" || n.mode === "ask", "got distracted into " + n.mode)
+}
+assert.strictEqual(n.mode, "ask")
+assert(Math.abs(n.x + rb.size / 2 - 1200) < 5, "asks right by the mouse")
+B.want(n, null)
+assert(n.mode !== "ask" && !n.nag, "cancelled reminder stops the asking")
+
+// Asked while up on a window: finishes the trip, then asks on the floor
+const w2 = B.create(500, ab.floor)
+for (let i = 0; i < 30 * 60 * 30 && w2.mode !== "climb"; i++) B.tick(w2, 1 / 30, ab, rand)
+assert.strictEqual(w2.mode, "climb")
+B.want(w2, "water")
+assert.strictEqual(w2.mode, "climb", "doesn't let go of the window")
+for (let i = 0; i < 30 * 120 && w2.mode !== "ask"; i++) B.tick(w2, 1 / 30, ab, rand)
+assert.strictEqual(w2.mode, "ask")
+assert.strictEqual(w2.y, ab.floor)
+
 // Energy: a lazy cat sleeps more than a playful one
 // Share of the time on screen spent asleep.
 function sleepShare(energy, species = "cat") {
@@ -348,22 +418,22 @@ for (const species of ["cat", "dog"]) {
     const w = mk(); w.step(1); settleDown(w)
     const lo = () => 0
     w.cat.mode = "sit"
-    for (let i = 0; i < 3; i++) { B.pet(w.cat, lo); assert.strictEqual(w.cat.mode, "petted"); w.step(15) }
-    B.pet(w.cat, lo)
+    for (let i = 0; i < 3; i++) { B.pet(w.cat, null, lo); assert.strictEqual(w.cat.mode, "petted"); w.step(15) }
+    B.pet(w.cat, null, lo)
     assert.strictEqual(w.cat.mode, "bat", "one pet too many gets a swat")
     w.step(30 * 2); assert.strictEqual(w.cat.mode, "walk", "and she walks off")
-    B.pet(w.cat, lo); assert.strictEqual(w.cat.mode, "sit", "sulking: only a tail flick")
+    B.pet(w.cat, null, lo); assert.strictEqual(w.cat.mode, "sit", "sulking: only a tail flick")
     w.dog.mode = "sit"
-    for (let i = 0; i < 3; i++) { B.pet(w.dog, lo); assert.strictEqual(w.dog.mode, "petted"); w.step(15) }
-    B.pet(w.dog, lo); assert.strictEqual(w.dog.mode, "belly", "enough quick pets and he rolls over")
+    for (let i = 0; i < 3; i++) { B.pet(w.dog, null, lo); assert.strictEqual(w.dog.mode, "petted"); w.step(15) }
+    B.pet(w.dog, null, lo); assert.strictEqual(w.dog.mode, "belly", "enough quick pets and he rolls over")
     // Faster than stroking pace doesn't count: a double-click is the toy, not two pets.
     const fast = B.create(600, floors.cat); fast.w = 1824
-    for (let i = 0; i < 40; i++) { B.pet(fast, lo); fast.petT = 0.2 }
+    for (let i = 0; i < 40; i++) { B.pet(fast, null, lo); fast.petT = 0.2 }
     assert(fast.mode === "petted" && fast.pets === 1, "hammering never reaches the limit: " + fast.mode + " " + fast.pets)
     const limits = new Set()
     for (let i = 0; i < 40; i++) {
       const c = B.create(600, floors.cat); c.w = 1824; let n = 0
-      while (c.mode !== "bat") { c.petT = 0.5; B.pet(c, rand); n++ }
+      while (c.mode !== "bat") { c.petT = 0.5; B.pet(c, null, rand); n++ }
       limits.add(n)
     }
     assert(limits.size >= 3, "her patience differs from streak to streak: " + [...limits])
@@ -463,7 +533,7 @@ for (const species of ["cat", "dog"]) {
 }
 // ---------- Bringing the toy unasked: the dog four times a day, the cat once, at random moments ----------
 {
-  const times = (day, species) => B.askTimes(day, species)
+  const times = (day, species) => B.offerTimes(day, species)
   for (let day = 739000; day < 739030; day++) {
     const d = times(day, "dog"), c = times(day, "cat")
     assert(d.length === 4 && c.length === 1)
@@ -649,11 +719,11 @@ for (const species of ["cat", "dog"]) {
     const { dog, pb } = pair()
     const alone = { friend: null }
     B.tick(dog, 1 / 30, pb("dog", alone), rand); dog.stay = 1e9
-    dog.mode = "idle"; B.ask(dog, pb("dog", alone), rand)
-    assert(dog.ball.asked && dog.mode === "carry")
+    dog.mode = "idle"; B.offer(dog, pb("dog", alone), rand)
+    assert(dog.ball.offered && dog.mode === "carry")
     dog.ball.held = true; B.tick(dog, 1 / 30, pb("dog", alone), rand); dog.ball = null
     B.spawnBall(dog, pb("dog", alone), rand)
-    assert(!dog.ball.asked, "a fresh ball is a plain one")
+    assert(!dog.ball.offered, "a fresh ball is a plain one")
   }
 }
 // ---------- Ticked only as fast as needed: the same life at every rate ----------
@@ -661,20 +731,21 @@ for (const species of ["cat", "dog"]) {
   const pb = { w: 1824, floor: 989, ground: 1079, size: 96, ballSize: 36, ledges: [], species: "cat", energy: 0.5 }
   const p = B.create(600, pb.floor)
   B.tick(p, 1 / 30, pb, rand)
-  p.mode = "sleep"; assert.strictEqual(B.tempo(p), 1, "asleep: holding still")
-  p.mode = "walk"; assert.strictEqual(B.tempo(p), 2, "walking: on the move")
-  p.mode = "away"; assert.strictEqual(B.tempo(p), 0, "off screen with nothing left behind: gone")
-  p.ball = { held: false, carried: false, vx: 0, vy: 0 }; assert.strictEqual(B.tempo(p), 1, "her yarn still lies there")
-  p.ball.vx = 200; assert.strictEqual(B.tempo(p), 2, "a rolling toy needs watching")
-  p.mode = "sit"; p.ball = { held: true, carried: false, vx: 0, vy: 0 }; assert.strictEqual(B.tempo(p), 2, "so does one in the hand")
+  p.mode = "sleep"; assert.strictEqual(B.tickInterval(p.mode, B.toyInPlay(p)), 1000, "asleep: once a second")
+  p.mode = "sit"; assert.strictEqual(B.tickInterval(p.mode, B.toyInPlay(p)), 250, "holding still")
+  p.mode = "walk"; assert.strictEqual(B.tickInterval(p.mode, B.toyInPlay(p)), 50, "strolling")
+  p.mode = "run"; assert.strictEqual(B.tickInterval(p.mode, B.toyInPlay(p)), 33, "at full rate while running")
+  p.mode = "away"; assert(B.tickInterval(p.mode, B.toyInPlay(p)) === 1000 && B.gone(p), "off screen with nothing left behind: gone")
+  p.ball = { held: false, carried: false, vx: 0, vy: 0 }; assert(!B.gone(p), "her yarn still lies there")
+  p.ball.vx = 200; assert.strictEqual(B.tickInterval(p.mode, B.toyInPlay(p)), 33, "a rolling toy needs watching")
+  p.mode = "sit"; p.ball = { held: true, carried: false, vx: 0, vy: 0 }; assert.strictEqual(B.tickInterval(p.mode, B.toyInPlay(p)), 33, "so does one in the hand")
 
-  // A day ticked the way the window does it (20, 5 or 1 times a second) comes out like one ticked evenly.
+  // A day ticked the way the window does it (from 30 times a second down to once) comes out like one ticked evenly.
   for (const species of ["cat", "dog"]) {
     const b = Object.assign({}, pb, { species, floor: 989 }), q = B.create(600, b.floor)
-    const rate = [1, 0.2, 0.05]
     let t = 0, away = 0, asleep = 0, here = 0, ticks = 0
     while (t < 3600 * 24) {
-      const dt = rate[B.tempo(q)]
+      const dt = B.tickInterval(q.mode, B.toyInPlay(q)) / 1000
       B.tick(q, dt, b, rand)
       t += dt; ticks++
       assert(Number.isFinite(q.x) && Number.isFinite(q.y), "lost her place")
@@ -687,5 +758,41 @@ for (const species of ["cat", "dog"]) {
     assert(asleep / here > 0.3 && asleep / here < 0.5, species + " asleep at mixed rates: " + (asleep / here).toFixed(2))
     assert(ticks < 3600 * 24 * 30 * 0.4, "far fewer ticks than 30 a second all day: " + ticks)
   }
+}
+// ---------- Care reminders with a dog, and while a pet is elsewhere ----------
+{
+  const pb = (species, extra) => Object.assign({ w: 1824, floor: 989, ground: 1079, size: 96, ballSize: 36, peek: 30, ledges: [], species, energy: 0.5 }, extra)
+  // The dog asks, is served, and eats or drinks like the cat; a break throws his ball.
+  for (const [kind, served] of [["water", "drink"], ["food", "eat"]]) {
+    const d = B.create(600, 989); B.tick(d, 1 / 30, pb("dog"), rand); d.stay = 1e9; d.mode = "idle"
+    B.want(d, kind); assert.strictEqual(d.mode, "ask")
+    B.pet(d, pb("dog"), rand); assert.strictEqual(d.mode, served)
+    assert(B.ANIMS[served].row < 20, "the care poses are on rows both species have")
+  }
+  const br = B.create(600, 989); B.tick(br, 1 / 30, pb("dog"), rand); br.mode = "idle"
+  B.want(br, "break"); B.pet(br, pb("dog"), rand)
+  assert(br.ball && !br.want, "a break is his ball")
+
+  // Off screen when the reminder comes: she comes straight back to ask.
+  const c = B.create(600, 989); B.tick(c, 1 / 30, pb("cat"), rand)
+  c.mode = "away"; c.x = -96; c.t = 0; c.until = 600; c.stay = 1e9
+  B.want(c, "water")
+  let asked = false
+  for (let i = 0; i < 30 * 60 && !asked; i++) { B.tick(c, 1 / 30, pb("cat"), rand); asked = c.mode === "ask" }
+  assert(asked && c.x >= 0 && c.x <= 1824, "back on screen and asking: " + c.mode + " at " + c.x)
+  B.pet(c, pb("cat"), rand); assert.strictEqual(c.mode, "drink")
+
+  // While asking she doesn't wander off, however long it takes.
+  const w = B.create(600, 989); B.tick(w, 1 / 30, pb("cat"), rand); w.mode = "idle"; w.stay = 0
+  B.want(w, "food")
+  for (let i = 0; i < 30 * 900; i++) { B.tick(w, 1 / 30, pb("cat"), rand); assert(!B.OFFSCREEN[w.mode], "left while asking") }
+  assert(w.want === "food")
+
+  // A shared screen still sends an asking pet off, and she can't be served out there.
+  const h = B.create(600, 989); B.tick(h, 1 / 30, pb("cat"), rand); h.mode = "idle"
+  B.want(h, "water")
+  for (let i = 0; i < 30 * 30; i++) B.tick(h, 1 / 30, pb("cat", { hide: true }), rand)
+  assert.strictEqual(h.mode, "away")
+  B.pet(h, pb("cat"), rand); assert(h.want === "water" && h.mode === "away", "no serving off screen")
 }
 console.log("brain ok")
