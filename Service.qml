@@ -531,6 +531,7 @@ Item {
     property int markX: 0
     property int markTop: 0
     property int markBottom: 0
+    property var markPts: []   // the line her paws took: [sideways from markX, y]
     readonly property alias body: pet
     readonly property alias toy: ball
 
@@ -565,16 +566,20 @@ Item {
         markX = Math.round(mark.x)
         markTop = Math.round(mark.top)
         markBottom = Math.round(mark.bottom)
+        if (mark.pts.length !== markPts.length) markPts = mark.pts.slice()   // a copy: the change has to be noticed
       }
     }
 
-    // Claw marks down the front of a window: three lines under each paw, a light scratch with a
-    // dark edge so they show on any window. Drawn under her; not in the input mask.
-    Item {
-      x: view.markX
+    // Claw marks down the front of a window: three lines under each paw following the way she
+    // slid, a light scratch with a dark edge so they show on any window. Drawn under her; not in
+    // the input mask.
+    Canvas {
+      id: scratches
+      readonly property int margin: Math.round(view.size * 0.3)   // room for her drift either way
+      x: view.markX - margin
       y: view.markTop
-      width: view.size
-      height: Math.max(0, view.markBottom - view.markTop)
+      width: view.size + 2 * margin
+      height: Math.max(1, view.markBottom - view.markTop)
       opacity: view.marked ? 0.45 : 0
       visible: opacity > 0 && !view.markGone
 
@@ -582,17 +587,29 @@ Item {
         NumberAnimation { duration: 900 }
       }
 
-      Repeater {
-        model: [6, 8, 10, 21, 23, 25]   // sprite columns of her claws in the climb frames
+      Connections {
+        target: view
+        function onMarkPtsChanged() { scratches.requestPaint() }
+      }
+      onHeightChanged: requestPaint()
 
-        Item {
-          required property int modelData
-          x: modelData * view.px
-          width: view.px
-          height: parent.height
-
-          Rectangle { x: 1; width: Math.max(1, view.px / 2); height: parent.height; color: "#90000000" }
-          Rectangle { width: Math.max(1, view.px / 2); height: parent.height; color: "#f5efe2" }
+      onPaint: {
+        var g = getContext("2d"), pts = view.markPts
+        g.clearRect(0, 0, width, height)
+        if (pts.length < 2) return
+        var claws = [6, 8, 10, 21, 23, 25]   // sprite columns of her claws in the climb frame
+        g.lineWidth = Math.max(1, view.px / 2)
+        for (var pass = 0; pass < 2; pass++) {
+          g.strokeStyle = pass ? "#f5efe2" : "#90000000"
+          for (var c = 0; c < claws.length; c++) {
+            g.beginPath()
+            for (var i = 0; i < pts.length; i++) {
+              var x = margin + pts[i][0] + claws[c] * view.px + (pass ? 0 : 1) + 0.5, y = pts[i][1] - view.markTop
+              if (i) g.lineTo(x, y)
+              else g.moveTo(x, y)
+            }
+            g.stroke()
+          }
         }
       }
     }

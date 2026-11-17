@@ -108,8 +108,13 @@ var LOW = { prowl: true, lurk: true, sleep: true, stretch: true }   // what she 
 var CLIMB_SPEED = 90    // px/s climbing up / down the front of a window
 // Now and then she doesn't climb down but lets herself slide, claws in the window, and leaves
 // scratch marks down its front that fade after a few seconds.
-var CLAW_SHARE = 0.2    // of the ways down
-var CLAW_SPEED = 150    // px/s
+var CLAW_SHARE = 0.1    // of the ways down
+// She starts slowly, claws holding, then loses grip: faster and faster, drifting to one side
+// with a small wobble, so the marks lean and waver instead of running ruler-straight.
+var CLAW_START = 50     // px/s at the top
+var CLAW_PULL = 95      // px/s more per second, twice over (distance = START*t + PULL*t^2)
+var CLAW_DRIFT = 0.23   // of her size, sideways by the time she lands
+var CLAW_WOBBLE = 0.026 // of her size, to and fro on the way
 var MARK_TIME = 5       // s the scratches stay after she has landed
 var PEEK_SPEED = 25     // px/s rising over / sinking below the window edge
 
@@ -166,7 +171,7 @@ function create(x, y) {
     visiting: false, then: null,
     stay: null, onFor: 0,   // s left before wandering off; s on screen since she came back
     perch: null, perchY: 0, perchFor: 0, onTop: false, low: false,
-    mark: null,   // scratches she left on a window: { id, x, top, bottom, left }
+    mark: null,   // scratches she left on a window: { id, x, top, bottom, pts, left, ... }
     staged: null, // set by the tour: which way the choices that are usually left to chance go   // the window she is on, by id; onTop: this climb goes over the top, in full view
     pending: false, laps: 0, offerDay: null, offerAt: [], offerDone: [],
     pets: 0, petT: Infinity, patience: null, grumpy: 0, calm: 0,
@@ -260,14 +265,18 @@ function perched(s, b) {
 // Back down the front of the window, in full view.
 // Sets off down the front of a window: mostly climbing, now and then sliding with her claws
 // out, which scratches it from its top edge down.
-function startDown(s, l, rand) {
+function startDown(s, l, b, rand) {
   if (s.staged ? !s.staged.claw : rand() >= CLAW_SHARE) return setMode(s, "descend", Infinity)
   setMode(s, "claw", Infinity)
-  s.mark = { id: l.id, x: s.x, top: l.y, bottom: l.y, left: MARK_TIME }
+  // Drifting towards the side of the window with more room. pts is the line her paws take:
+  // [sideways from where she started, y], one point every couple of pixels.
+  var room = l.x + l.w - b.size - s.x
+  s.mark = { id: l.id, x: s.x, y0: s.y, t: 0, dir: s.x - l.x > room ? -1 : 1,
+             top: l.y, bottom: l.y, pts: [], left: MARK_TIME }
 }
 
-function climbDown(s, l, rand) {
-  startDown(s, l, rand)
+function climbDown(s, l, b, rand) {
+  startDown(s, l, b, rand)
   s.goal = l.id
   s.onTop = true
   s.perch = null
@@ -276,7 +285,7 @@ function climbDown(s, l, rand) {
 // What she does next up there: the quiet half of what she does on the floor, within the
 // window's width. When her time is up, or she is due off screen, she climbs back down.
 function perchNext(s, b, l, rand) {
-  if (s.perchFor <= 0 || s.stay <= 0) return climbDown(s, l, rand)
+  if (s.perchFor <= 0 || s.stay <= 0) return climbDown(s, l, b, rand)
   var e = b.energy === undefined ? 0.5 : b.energy
   var tired = (1 - e) * (1 - e)
   var r = rand()
@@ -772,7 +781,7 @@ function tick(s, dt, b, rand) {
       if (s.low) {
         // Asking for something means sitting up, and there is no room: she comes down for it.
         if (s.want) {
-          climbDown(s, top, rand)
+          climbDown(s, top, b, rand)
           return s
         }
         // Whatever else would have her upright up here (a pet, a welcome) she takes lying low.
@@ -863,12 +872,25 @@ function climbStep(s, b, l, dt, rand) {
     s.y += PEEK_SPEED * dt
     if (s.y >= l.y) {   // back over the edge to the front
       s.y = l.y - b.size
-      startDown(s, l, rand)
+      startDown(s, l, b, rand)
     }
   } else {
-    // The scratches run down to where her paws are now.
-    if (s.mode === "claw" && s.mark) s.mark.bottom = Math.max(s.mark.bottom, Math.min(ground(b), s.y + b.size * 0.2))
-    s.y += (s.mode === "claw" ? CLAW_SPEED : CLIMB_SPEED) * dt
+    var m = s.mode === "claw" ? s.mark : null
+    if (m) {
+      m.t += dt
+      var slid = CLAW_START * m.t + CLAW_PULL * m.t * m.t
+      var p = Math.min(1, slid / Math.max(1, b.floor - m.y0))
+      s.y = m.y0 + slid
+      // Never past the window's sides: she has to stay on it to stay up.
+      var drift = m.dir * (CLAW_DRIFT * p * p + CLAW_WOBBLE * Math.sin(p * 21)) * b.size
+      s.x = Math.max(l.x, Math.min(l.x + l.w - b.size, m.x + drift))
+      // The scratches run down to where her paws are now.
+      var paws = Math.min(ground(b), s.y + b.size * 0.2)
+      if (paws >= m.top && paws >= m.bottom + 2) {
+        m.pts.push([s.x - m.x, paws])
+        m.bottom = paws
+      }
+    } else s.y += CLIMB_SPEED * dt
     if (s.y >= b.floor) {
       s.y = b.floor
       setMode(s, "idle", 1 + rand() * 2)
@@ -1203,7 +1225,11 @@ function tourTogether() {
         s.staged = { onTop: false, claw: false, play: play }
         visit(s, f, b)
       },
-      done: function(s) { if (!s.visiting && s.mode !== "walk") began = true; return began && s.mode === "idle" } }
+      // Over once he has arrived and is through with whatever the visit turned into.
+      done: function(s) {
+        if (!s.visiting && s.mode !== "walk") began = true
+        return began && !{ sit: true, invite: true, spin: true, bark: true }[s.mode]
+      } }
   }
   return [
     visiting("A visit: sitting together", false),
