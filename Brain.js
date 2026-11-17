@@ -105,6 +105,9 @@ var CHASE_ENERGY = 0.35 // below this he can't be bothered
 var ASK_HOURS = [9, 21] // the toy is brought unasked between these hours
 var ASK_OPEN = 0.75     // hours such a moment stays open if she can't right then
 var ZOOM_ENERGY = 0.7   // zoomies only above this
+// Holding a pet's toy up high winds it up: after a few seconds it can't hold still any longer.
+var TEASE_ABOVE = 1 / 3 // of the screen height, from the top
+var TEASE_TIME = 5      // s the toy has to stay up there
 var PET_WINDOW = 4      // s within which pets count as "again"
 var CAT_PATIENCE = 3    // pets in a row a cat enjoys, at least (up to two more, and two more when sleepy)
 var DOG_BELLY = 5       // pets in a row, give or take one, and he rolls over
@@ -357,6 +360,31 @@ function ask(s, b, rand) {
   setMode(s, "bat", 0.5)
 }
 
+// Two or three races from one end of the screen to the other.
+function zoomies(s, b, rand) {
+  s.laps = rand() < 0.5 ? 2 : 3
+  walkTo(s, s.x < b.w / 2 ? b.w * 0.95 : b.w * 0.05, "zoom")
+}
+
+// The toy held up out of reach: once it has been up there long enough, and as soon as she is on
+// the floor and free to, she tears off. Once per hold; letting go resets it.
+function tease(s, b, dt, rand) {
+  var o = s.ball
+  if (!o) return
+  if (!o.held) {
+    o.high = 0
+    o.teased = false
+    return
+  }
+  o.high = o.y < ground(b) * TEASE_ABOVE ? (o.high || 0) + dt : 0
+  if (o.teased || o.high < TEASE_TIME) return
+  if (OFFSCREEN[s.mode] || ON_LEDGE[s.mode] || s.perch !== null || s.mode === "held" || s.mode === "fall"
+      || s.mode === "hop" || s.mode === "pounce") return
+  o.teased = true
+  s.y = b.floor
+  zoomies(s, b, rand)
+}
+
 // Runs a queued step: a mode for a while, or a walk to x.
 function run(s, q) {
   if (q.x !== undefined) walkTo(s, q.x, q.mode)
@@ -473,10 +501,7 @@ function next(s, b, rand) {
     if (dog && e > CHASE_ENERGY && f.mode !== "sleep" && rand() < CHASE_SHARE) return chase(s, f)
     return visit(s, f, b)
   }
-  if (e > ZOOM_ENERGY && rand() < 0.1 * (e - ZOOM_ENERGY) / (1 - ZOOM_ENERGY)) {
-    s.laps = rand() < 0.5 ? 2 : 3
-    return walkTo(s, s.x < b.w / 2 ? b.w * 0.95 : b.w * 0.05, "zoom")
-  }
+  if (e > ZOOM_ENERGY && rand() < 0.1 * (e - ZOOM_ENERGY) / (1 - ZOOM_ENERGY)) return zoomies(s, b, rand)
   var r = rand()
   // Sitting, grooming and yawning take 0.4 of the decisions for either species. A dog spends
   // part of that barking and chasing his tail instead, the more the livelier he is, so the
@@ -601,6 +626,7 @@ function tick(s, dt, b, rand) {
   }
   watchCursor(s, b, dt)
   moveBall(s, b, dt, rand)
+  tease(s, b, dt, rand)
   if (s.mode === "held") return s
   if (s.mode === "fall") {
     s.vy += GRAVITY * dt

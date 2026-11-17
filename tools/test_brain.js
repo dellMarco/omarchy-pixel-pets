@@ -566,4 +566,30 @@ for (const species of ["cat", "dog"]) {
     assert(cat.perch !== null && cat.mode !== "flee", "she stays put")
   }
 }
+// ---------- Holding the toy up high for five seconds sets off the zoomies ----------
+for (const species of ["cat", "dog"]) {
+  const pb = { w: 1824, floor: 989, ground: 1079, size: 96, ballSize: 36, ledges: [], species, energy: 0.04 }
+  const p = B.create(600, pb.floor); p.stay = 1e9
+  B.tick(p, 1 / 30, pb, rand)
+  B.spawnBall(p, pb, rand)
+  const hold = (y, seconds) => { for (let i = 0; i < 30 * seconds; i++) { p.ball.held = true; p.ball.x = 900; p.ball.y = y; p.ball.life = 40; B.tick(p, 1 / 30, pb, rand) } }
+  hold(700, 8)
+  assert.notStrictEqual(p.mode, "zoom", species + ": held low, nothing happens")
+  hold(100, 4.5)
+  assert.notStrictEqual(p.mode, "zoom", species + ": not before five seconds")
+  hold(100, 1)
+  assert.strictEqual(p.mode, "zoom", species + ": five seconds up high and off it goes, lazy or not")
+  let zooms = 1, was = "zoom"
+  for (let i = 0; i < 30 * 60; i++) {
+    p.ball.held = true; p.ball.x = 900; p.ball.y = 100; p.ball.life = 40
+    B.tick(p, 1 / 30, pb, rand)
+    if (p.mode === "zoom" && was !== "zoom" && p.laps === 0) zooms++
+    was = p.mode
+  }
+  assert(p.mode !== "zoom", "it ends")
+  assert.strictEqual(p.ball.teased, true, "once per hold")
+  p.ball.held = false; B.tick(p, 1 / 30, pb, rand)
+  hold(100, 5.2)
+  assert.strictEqual(p.mode, "zoom", species + ": letting go and holding it up again works again")
+}
 console.log("brain ok")

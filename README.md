@@ -54,6 +54,7 @@ How often the self-started ones happen follows the energy slider and the time of
 - **Ask to play:** four times a day, at random moments between 9 and 21 o'clock, the dog brings you his
   ball unasked and bows; ignored, he lies down next to it. Once a day the cat nudges her yarn your way.
 - **Zoomies:** at high energy, a sudden race from one end of the screen to the other and back.
+  Holding a pet's toy in the top third of the screen for five seconds sets it off too.
 - **Dreams:** once per long nap a thought bubble shows the toy or the other pet.
 - **Music:** while something plays, sitting tails flick faster and the dog spins more.
 - **Startled:** a window opening or closing right over a pet makes the cat hop and scurry off and
