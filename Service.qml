@@ -481,6 +481,7 @@ Item {
           else Brain.pet(view.brain)
           view.sync()
         }
+        onDoubleClicked: root.giveBall(view.species)
       }
     }
 

@@ -348,18 +348,22 @@ for (const species of ["cat", "dog"]) {
     const w = mk(); w.step(1); settleDown(w)
     const lo = () => 0
     w.cat.mode = "sit"
-    for (let i = 0; i < 3; i++) { B.pet(w.cat, lo); assert.strictEqual(w.cat.mode, "petted"); w.step(10) }
+    for (let i = 0; i < 3; i++) { B.pet(w.cat, lo); assert.strictEqual(w.cat.mode, "petted"); w.step(15) }
     B.pet(w.cat, lo)
     assert.strictEqual(w.cat.mode, "bat", "one pet too many gets a swat")
     w.step(30 * 2); assert.strictEqual(w.cat.mode, "walk", "and she walks off")
     B.pet(w.cat, lo); assert.strictEqual(w.cat.mode, "sit", "sulking: only a tail flick")
     w.dog.mode = "sit"
-    for (let i = 0; i < 3; i++) { B.pet(w.dog, lo); assert.strictEqual(w.dog.mode, "petted"); w.step(10) }
+    for (let i = 0; i < 3; i++) { B.pet(w.dog, lo); assert.strictEqual(w.dog.mode, "petted"); w.step(15) }
     B.pet(w.dog, lo); assert.strictEqual(w.dog.mode, "belly", "enough quick pets and he rolls over")
+    // Faster than stroking pace doesn't count: a double-click is the toy, not two pets.
+    const fast = B.create(600, floors.cat); fast.w = 1824
+    for (let i = 0; i < 40; i++) { B.pet(fast, lo); fast.petT = 0.2 }
+    assert(fast.mode === "petted" && fast.pets === 1, "hammering never reaches the limit: " + fast.mode + " " + fast.pets)
     const limits = new Set()
     for (let i = 0; i < 40; i++) {
       const c = B.create(600, floors.cat); c.w = 1824; let n = 0
-      while (c.mode !== "bat") { B.pet(c, rand); n++ }
+      while (c.mode !== "bat") { c.petT = 0.5; B.pet(c, rand); n++ }
       limits.add(n)
     }
     assert(limits.size >= 3, "her patience differs from streak to streak: " + [...limits])

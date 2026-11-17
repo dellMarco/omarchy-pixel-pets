@@ -109,6 +109,7 @@ var ZOOM_ENERGY = 0.7   // zoomies only above this
 var TEASE_ABOVE = 1 / 3 // of the screen height, from the top
 var TEASE_TIME = 5      // s the toy has to stay up there
 var PET_WINDOW = 4      // s within which pets count as "again"
+var PET_GAP = 0.35      // s: a click sooner than this after the last one is not another pet
 var CAT_PATIENCE = 3    // pets in a row a cat enjoys, at least (up to two more, and two more when sleepy)
 var DOG_BELLY = 5       // pets in a row, give or take one, and he rolls over
 var CALM = 240          // s at least between two startles
@@ -825,6 +826,12 @@ function pet(s, rand) {
   rand = rand || Math.random
   if (s.mode === "peekup" || s.mode === "peek") return setMode(s, "peekdown", Infinity)   // ducks
   if (ON_LEDGE[s.mode] || s.mode === "held" || s.mode === "fall" || s.mode === "away") return
+  // Hammering isn't petting, and a double-click (which gives the toy) is not two pets:
+  // only a click at stroking pace counts.
+  if (s.petT < PET_GAP) {
+    s.petT = 0
+    return
+  }
   var dog = s.species === "dog"
   if (s.petT >= PET_WINDOW || s.patience === null) {
     s.pets = 0

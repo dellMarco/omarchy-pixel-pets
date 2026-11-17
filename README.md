@@ -8,7 +8,7 @@ windows. What follows describes the cat; the dog and the two together come furth
 
 - **Click** her to pet her.
 - **Drag** her to pick her up, let go to drop her.
-- The **yarn ball** button in the settings gives her a ball of yarn. She chases and bats it around; you can drag and throw it too.
+- **Double-click** her to give her a ball of yarn (or use the button in the settings). She chases and bats it around; you can drag and throw it too.
 - Wiggle the **mouse** near the bottom of the screen and she may stalk and pounce on it.
 
 Now and then she climbs up one of your windows (back to you, tail swinging). If there is room above it she
@@ -51,8 +51,9 @@ How often the self-started ones happen follows the energy slider and the time of
 - **Contagious yawn:** one yawns, the other often follows, and now and then both nap.
 - **Welcome back:** leave the desk for a few minutes and they nap. Touch the mouse and the dog runs to
   your pointer for hearts; the cat stretches and yawns. Sleepy pets just stretch and sleep on.
-- **Petting has a limit:** after a few quick pets the cat swats the pointer, walks off and sulks for a
-  bit. A few more and the dog rolls over for a belly rub.
+- **Petting has a limit:** after a few pets in a row the cat swats the pointer, walks off and sulks for a
+  bit. A few more and the dog rolls over for a belly rub. Pets count at stroking pace; faster clicks don't,
+  so a double-click is still just the toy.
 - **Ask to play:** four times a day, at random moments between 9 and 21 o'clock, the dog brings you his
   ball unasked and bows; ignored, he lies down next to it. Once a day the cat nudges her yarn your way.
 - **Zoomies:** at high energy, a sudden race from one end of the screen to the other and back.

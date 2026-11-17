@@ -51,8 +51,8 @@ Panel {
     cameraShy: ["Camera shy", "They run off screen while the screen or a window is shared or recorded, and come back about 15 seconds after it stops."],
     chaseMouse: ["Stalk the pointer", "They crouch and pounce at the pointer when it moves near the bottom edge. Off: they ignore it, and a toy they bring is dropped anywhere, not below the pointer."],
     hangOnWindows: ["Cat climbs windows", "She climbs windows, on her own and to escape the dog: onto the top to walk, sit and nap if there is room above, else up behind it to peek over. Off: she stays on the floor and escapes off screen."],
-    catToy: ["Give yarn ball", "She chases and bats it around; you can drag and throw it too. Hold it up high for five seconds and she gets the zoomies. Giving it calls her back if she is off screen."],
-    dogToy: ["Throw tennis ball", "He fetches it back to where it was thrown from and barks for another throw. Hold it up high for five seconds and he gets the zoomies. Throwing it calls him back if he is off screen."]
+    catToy: ["Give yarn ball", "Double-clicking her does the same. She chases and bats it around; you can drag and throw it. Hold it up high for five seconds and she gets the zoomies. Giving it calls her back if she is off screen."],
+    dogToy: ["Throw tennis ball", "Double-clicking him does the same. He fetches it back to where it was thrown from and barks for more. Hold it up high for five seconds and he gets the zoomies. Throwing it calls him back if he is off screen."]
   })
   property string helpKey: ""
   function over(key, isHovered) {
