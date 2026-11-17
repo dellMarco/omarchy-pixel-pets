@@ -159,7 +159,7 @@ assert.strictEqual(r.mode, "eat")
 B.want(r, "break"); B.pet(r, rb)
 assert(r.ball && r.want === null, "a break brings out the ball")
 tick30(r, rb, 30 * 3)
-assert.strictEqual(r.mode, "run", "and she plays with it")
+assert(r.mode === "run" || r.mode === "bat", "and she plays with it, was " + r.mode)   // chasing it, or just batting it
 B.want(r, null)
 
 // Ignored for NAG_AFTER: she walks over to the mouse, bubble bouncing, and asks there
@@ -828,5 +828,29 @@ for (const species of ["cat", "dog"]) {
   // A medium cat doesn't fit under the bar: she only peeks over that window.
   const medium = B.create(600, pb(96).floor)
   for (let i = 0; i < 30 * 3600 * 2; i++) { B.tick(medium, 1 / 30, pb(96), rand); medium.stay = 1e9; assert(medium.perch === null, "no room for a medium cat") }
+}
+// ---------- Sliding down a window with her claws out, leaving scratches ----------
+{
+  const size = 96, floor = 989, ground = 1079
+  const shelf = { id: "0xshelf", x: 300, y: 500, w: 800 }
+  const pb = () => ({ w: 1920 - size, floor, ground, size, ballSize: 36, peek: 30, ledges: [shelf], species: "cat", energy: 0.5 })
+  const c = B.create(600, floor)
+  let downs = 0, slides = 0, was = "", marksSeen = 0, longest = 0, since = 0
+  for (let i = 0; i < 30 * 3600 * 20; i++) {
+    B.tick(c, 1 / 30, pb(), rand); c.stay = 1e9
+    if ((c.mode === "descend" || c.mode === "claw") && was !== c.mode) { downs++; if (c.mode === "claw") slides++ }
+    if (c.mode === "claw") {
+      assert(c.mark && c.mark.id === shelf.id && c.mark.top === shelf.y, "scratches start at the window's top edge")
+      assert(c.mark.bottom >= c.mark.top && c.mark.bottom <= ground, "and run down to her paws")
+      assert(c.clipBottom === Infinity)
+    }
+    if (c.mark) marksSeen++
+    since = c.mark && c.mode !== "claw" ? since + 1 : 0
+    longest = Math.max(longest, since)
+    was = c.mode
+  }
+  assert(downs > 40, "came down often enough to judge: " + downs)
+  assert(slides / downs > 0.1 && slides / downs < 0.32, "about one way down in five is a slide: " + slides + " of " + downs)
+  assert(longest / 30 > 4 && longest / 30 < 6, "the scratches fade a few seconds after she lands: " + (longest / 30).toFixed(1))
 }
 console.log("brain ok")

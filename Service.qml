@@ -230,21 +230,18 @@ Item {
         if (views[i].active && views[i].brain) fn(views[i].brain, boundsFor(views[i]))
     }
 
-    // A window opened or closed over this stretch of the floor: startle whoever stands there.
-    function startleAt(x, w) {
+    // A window opened or closed right over a pet: startle the one whose middle is inside it.
+    // A window somewhere else on the screen, or only above or beside them, is none of their business.
+    function startleIn(r) {
       for (var i = 0; i < views.length; i++) {
         var v = views[i]
         if (!v.active || !v.brain) continue
-        var mid = v.brain.x + v.size / 2
-        if (mid >= x && mid <= x + w) {
+        var cx = v.brain.x + v.size / 2, cy = v.brain.y + v.size * 0.6
+        if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
           hurry()
           Brain.startle(v.brain, boundsFor(v), Math.random)
         }
       }
-    }
-    function ledgeOf(address) {
-      for (var i = 0; i < ledges.length; i++) if (ledges[i].id === "0x" + address) return ledges[i]
-      return null
     }
     property string opened: ""
     property real switchedAt: 0
@@ -255,8 +252,8 @@ Item {
       onTriggered: {
         if (win.justSwitched()) return
         win.refreshLedges()
-        var l = win.ledgeOf(win.opened)
-        if (l) win.startleAt(l.x, l.w)
+        var r = win.rects["0x" + win.opened]
+        if (r) win.startleIn(r)
       }
     }
 
@@ -291,8 +288,10 @@ Item {
 
     // Top edges of the windows visible on this monitor, in this window's coordinates.
     property var ledges: []
+    // Every window on this workspace, whole, by address: where one opens or closes.
+    property var rects: ({})
     function refreshLedges() {
-      var out = []
+      var out = [], all = {}
       var mon = Hyprland.monitorFor(win.screen)
       var ws = mon ? mon.activeWorkspace : null
       if (ws && !ws.hasFullscreen) {
@@ -300,6 +299,7 @@ Item {
         for (var i = 0; i < tops.length; i++) {
           var o = tops[i].lastIpcObject
           if (!o || !o.at || !o.size || o.hidden || !o.workspace || o.workspace.id !== ws.id) continue
+          all[o.address] = { x: o.at[0] - mon.x, y: o.at[1] - mon.y, w: o.size[0], h: o.size[1] }
           if (o.size[1] < catView.size * 1.5) continue
           // Only the part of the top edge that is on this screen counts: she can't walk past the
           // screen edge to reach the rest. Only the cat climbs, so it has to be wide enough for her.
@@ -309,6 +309,7 @@ Item {
         }
       }
       ledges = out
+      rects = all
     }
 
     // Hyprland sends no event when a tile is resized, so poll as well as listen.
@@ -337,8 +338,8 @@ Item {
           win.opened = data.split(",")[0]
           openedCheck.restart()
         } else if (name === "closewindow") {
-          var gone = win.ledgeOf(data)
-          if (gone) win.startleAt(gone.x, gone.w)
+          var gone = win.rects["0x" + data]
+          if (gone) win.startleIn(gone)
         }
       }
     }
@@ -445,6 +446,11 @@ Item {
     readonly property string name: root.nameOf(species)
     // What she is dreaming of right now: "toy", "friend" or nothing.
     property string dream: ""
+    // Scratch marks she left sliding down a window.
+    property bool marked: false
+    property int markX: 0
+    property int markTop: 0
+    property int markBottom: 0
     readonly property alias body: pet
     readonly property alias toy: ball
 
@@ -471,6 +477,43 @@ Item {
       }
       ball.shown = brain.ball !== null
       dream = brain.dream ? brain.dream.what : ""
+      // Scratches only show while their window is still there; the place is kept so they can fade.
+      var mark = brain.mark
+      marked = !!mark && win.rects[mark.id] !== undefined
+      if (mark) {
+        markX = Math.round(mark.x)
+        markTop = Math.round(mark.top)
+        markBottom = Math.round(mark.bottom)
+      }
+    }
+
+    // Claw marks down the front of a window: three lines under each paw, a light scratch with a
+    // dark edge so they show on any window. Drawn under her; not in the input mask.
+    Item {
+      x: view.markX
+      y: view.markTop
+      width: view.size
+      height: Math.max(0, view.markBottom - view.markTop)
+      opacity: view.marked ? 0.85 : 0
+      visible: opacity > 0
+
+      Behavior on opacity {
+        NumberAnimation { duration: 900 }
+      }
+
+      Repeater {
+        model: [6, 8, 10, 21, 23, 25]   // sprite columns of her claws in the climb frames
+
+        Item {
+          required property int modelData
+          x: modelData * view.px
+          width: view.px
+          height: parent.height
+
+          Rectangle { x: 1; width: Math.max(1, view.px / 2); height: parent.height; color: "#90000000" }
+          Rectangle { width: Math.max(1, view.px / 2); height: parent.height; color: "#f5efe2" }
+        }
+      }
     }
 
     Item {
