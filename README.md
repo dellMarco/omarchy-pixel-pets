@@ -33,7 +33,7 @@ minutes or more. The dog does the same; with both out they take turns.
 ## Settings
 
 Click the icon in the bar to open the settings: which pets are out, a name and coat for each, size,
-energy (lazy to playful), and switches for following the time of day, hiding while the screen is shared,
+energy (lazy to playful), and switches for following the time of day, wandering off,
 stalking the pointer, climbing windows and care reminders (with how often water, food and a break
 come), plus a button for each pet's toy. Point at any of them and
 the line at the bottom says what it does. Right-click the icon to hide or show the pets. A pet's name
@@ -71,10 +71,6 @@ How often the self-started ones happen follows the energy slider and the time of
   Holding a pet's toy in the top third of the screen for five seconds sets it off too.
 - **Dreams:** once per long nap a thought bubble shows the toy or the other pet.
 - **Music:** while something plays, sitting tails flick faster and the dog spins more.
-- **Startled:** a window opening or closing right over a pet makes the cat hop and scurry off and
-  the dog bark, at most once every few minutes.
-- **Camera shy:** a few seconds into a screen or window share they run off and stay away until it ends;
-  screenshots and thumbnails don't count. Switch in the settings.
 - **Low battery:** below 20% they get sleepy, below 10% they sleep; plugging in wakes them.
 
 Settings are saved in `~/.config/omarchy/pixel-pets.json`.

@@ -11,7 +11,7 @@
 //            cursor: { x, y } mouse position, or null when it is not on this screen,
 //            species: "cat" | "dog",
 //            wander: false keeps them from leaving the screen on their own (default: they do);
-//            music: something is playing; hide: the screen is being shared, stay out of sight;
+//            music: something is playing;
 //            exhausted: the battery is nearly empty, sleep;
 //            day: a number that changes at midnight, hour: local time 0..24 (both optional:
 //            without them no toy is ever brought unasked) }
@@ -62,9 +62,8 @@ var ANIMS = {
   leave:   { row: 1, frames: 6, fps: 10 },
   away:    { row: 0, frames: 4, fps: 3 },
   enter:   { row: 1, frames: 6, fps: 10 },
-  // Short bursts: a startled hop, running off, racing about, running to greet.
+  // Short bursts: a hop, running off, racing about, running to greet.
   hop:     { row: 6, frames: 2, fps: 8 },
-  scurry:  { row: 1, frames: 6, fps: 16 },
   flee:    { row: 1, frames: 6, fps: 18 },
   zoom:    { row: 1, frames: 6, fps: 20 },
   greet:   { row: 1, frames: 6, fps: 16 },
@@ -90,10 +89,10 @@ var RUN_SPEED = 150     // px/s chasing the ball
 // Modes that move along the floor towards targetX, and how fast.
 var PACE = {
   walk: SPEED, sniff: 35, prowl: 30, run: RUN_SPEED, carry: 120, leave: SPEED, enter: SPEED,
-  chase: RUN_SPEED, flee: 190, scurry: RUN_SPEED, greet: RUN_SPEED, zoom: 320
+  chase: RUN_SPEED, flee: 190, greet: RUN_SPEED, zoom: 320
 }
 // Of those, the ones that end on arrival and then decide what comes next.
-var ARRIVES = { walk: true, sniff: true, prowl: true, leave: true, enter: true, flee: true, scurry: true, greet: true, zoom: true }
+var ARRIVES = { walk: true, sniff: true, prowl: true, leave: true, enter: true, flee: true, greet: true, zoom: true }
 var HOP_HEIGHT = 30     // px
 var SPIN_FLIP = 0.16    // s between turns while chasing his tail
 // Where the ball cell sits in the 32px frame while carried in the mouth, facing right.
@@ -140,7 +139,6 @@ var PET_WINDOW = 4      // s within which pets count as "again"
 var PET_GAP = 0.35      // s: a click sooner than this after the last one is not another pet
 var CAT_PATIENCE = 3    // pets in a row a cat enjoys, at least (up to two more, and two more when sleepy)
 var DOG_BELLY = 5       // pets in a row, give or take one, and he rolls over
-var STARTLE_REST = 240  // s at least between two startles
 
 // Two pets out together: share of idle decisions, at full energy, that go and see the other one.
 var MEET_CHANCE = 0.1
@@ -179,7 +177,7 @@ function create(x, y) {
     arrived: 0,   // when she last came over or came back, for who stands in front
     staged: null, // set by the tour: which way the choices that are usually left to chance go   // the window she is on, by id; onTop: this climb goes over the top, in full view
     pending: false, laps: 0, offerDay: null, offerAt: [], offerDone: [],
-    pets: 0, petT: Infinity, patience: null, grumpy: 0, calm: 0,
+    pets: 0, petT: Infinity, patience: null, grumpy: 0,
     dream: null, dreamAt: null, settled: false,
     // What the last tick knew, for the calls that come without bounds (pet).
     species: "cat", energy: 0.5, w: 0,
@@ -539,9 +537,8 @@ function next(s, b, rand) {
     return near && Math.abs(near.x - s.x) < Math.max(b.size, b.friendSize || 0) * 1.5 ? meet(s, near, b, rand) : setMode(s, "idle", 1)
   }
   if (m === "drink" || m === "eat") return setMode(s, "petted", 1.5)
-  if (m === "leave") return setMode(s, "away", b.hide ? 3 : s.want ? 0 : s.awayFor)
+  if (m === "leave") return setMode(s, "away", s.want ? 0 : s.awayFor)
   if (m === "away") {
-    if (b.hide) return setMode(s, "away", 3)   // still being shared: look again in a moment
     if (s.want) {   // something to ask for: straight back in
       s.stay = STAY_MIN + rand() * STAY_SPAN
       return comeBack(s, b, 0, rand())
@@ -739,7 +736,6 @@ function tick(s, dt, b, rand) {
   if (s.stay === null) s.stay = STAY_MIN + rand() * STAY_SPAN
   s.petT += dt
   if (s.grumpy > 0) s.grumpy -= dt
-  if (s.calm > 0) s.calm -= dt
   // The clocks stand still while nobody is at the desk, or both would wake with their time up
   // and walk off side by side.
   if (!OFFSCREEN[s.mode] && !s.settled) {
@@ -748,8 +744,8 @@ function tick(s, dt, b, rand) {
   }
   if (s.mark && s.mode !== "claw" && (s.mark.left -= dt) <= 0) s.mark = null
   // Wandering switched off: whoever is on the way out turns round, whoever is out comes back.
-  // (Hiding from a shared screen and the tour's own trip are not wandering.)
-  if (b.wander === false && !b.hide && !s.staged) {
+  // (The tour's own trip is not wandering.)
+  if (b.wander === false && !s.staged) {
     if (s.mode === "leave") setMode(s, "idle", 0.5)
     else if (s.mode === "away") s.until = Math.min(s.until, s.t)
   }
@@ -766,8 +762,8 @@ function tick(s, dt, b, rand) {
     }
   } else if (ON_LEDGE[s.mode]) {
     var l = ledge(s, b)
-    // Window closed or moved: she is suddenly in plain sight, and falls. A shared screen brings her down too.
-    if (!l || b.hide) drop(s)
+    // Window closed or moved: she is suddenly in plain sight, and falls.
+    if (!l) drop(s)
     else climbStep(s, b, l, dt, rand)
   } else if (s.mode === "pounce") {
     s.t += dt
@@ -795,9 +791,9 @@ function tick(s, dt, b, rand) {
     var top = null
     if (s.perch !== null) {
       top = perched(s, b)
-      // The window closed, moved or is on another workspace now; a toy is out; or the screen is
-      // being shared: down she comes, and the floor rules take over from there.
-      if (!top || b.hide || (s.ball && !s.ball.fetched)) {
+      // The window closed, moved or is on another workspace now, or a toy is out:
+      // down she comes, and the floor rules take over from there.
+      if (!top || (s.ball && !s.ball.fetched)) {
         drop(s)
         return s
       }
@@ -815,9 +811,8 @@ function tick(s, dt, b, rand) {
     }
     s.y = top ? perchTop(top, b) : b.floor
     s.t += dt
-    if (b.hide && !OFFSCREEN[s.mode]) leave(s, b, rand)   // screen is being shared: out of sight
     // Time to bring the toy: that gets her up from a nap, or back from a wander.
-    if (!b.hide && !b.exhausted && !s.settled && !s.ball && !top && !s.want && offerDue(s, b) >= 0) {
+    if (!b.exhausted && !s.settled && !s.ball && !top && !s.want && offerDue(s, b) >= 0) {
       if (s.mode === "away") callBack(s, b, rand)
       else if (s.mode === "sleep") setMode(s, "stretch", 1.5)
     }
@@ -846,8 +841,7 @@ function tick(s, dt, b, rand) {
     // A spot past the screen edge can't be reached; without this she would walk on the spot for it.
     if (PACE[s.mode] && !OFFSCREEN[s.mode]) s.targetX = Math.max(0, Math.min(b.w, s.targetX))
     if (PACE[s.mode]) {
-      // Getting out of a shared screen is done at a run.
-      s.x += s.dir * (s.mode === "leave" && b.hide ? RUN_SPEED : PACE[s.mode]) * dt
+      s.x += s.dir * PACE[s.mode] * dt
       if ((s.targetX - s.x) * s.dir <= 0) {
         s.x = s.targetX   // no overshoot: a hang spot must stay inside its window
         if (ARRIVES[s.mode]) s.t = s.until = 0
@@ -1026,20 +1020,6 @@ function pet(s, b, rand) {
   setMode(s, "petted", about(1.5, rand))
 }
 
-// A window opened or closed right where she is. The cat hops and scurries a few steps off;
-// the dog barks at it. More likely the livelier she is, and not again for a few minutes.
-function startle(s, b, rand) {
-  if (!REACTIVE[s.mode] || s.goal !== null || s.perch !== null || s.calm > 0 || rand() > 0.2 + 0.6 * s.energy) return
-  s.calm = STARTLE_REST + rand() * STARTLE_REST
-  // Mostly the dog barks and the cat hops and scurries off; now and then he jumps and she just hops.
-  var hops = traits(b).fetches ? rand() < 0.3 : true
-  if (!hops) return setMode(s, "bark", about(1.5, rand))
-  var x = s.x + (rand() < 0.5 ? -1 : 1) * (150 + rand() * 150)
-  setMode(s, "hop", 0.35)
-  if (traits(b).fetches) s.then = { mode: "bark", duration: about(1, rand) }
-  else if (rand() < 0.75) s.then = { mode: "scurry", x: Math.max(0, Math.min(b.w, x)) }
-}
-
 // Nobody at the desk: nap right here until someone is back.
 function settle(s) {
   if (OFFSCREEN[s.mode] || ON_LEDGE[s.mode] || s.mode === "held" || s.mode === "fall") return
@@ -1215,9 +1195,6 @@ function tour(species) {
     { name: "Drinking", seconds: 4, start: function(s, b, rand) { want(s, "water"); pet(s, b, rand) } },
     { name: "Asking for food", seconds: 3.5, start: function(s) { setMode(s, "idle", 1); want(s, "food") } },
     { name: "Eating", seconds: 5, start: function(s, b, rand) { want(s, "food"); pet(s, b, rand) } },
-    { name: "Startled by a window", seconds: 3.5, start: function(s, b) {
-        setMode(s, "idle", 1); s.calm = 0
-        startle(s, b, function() { return 0.5 }) } },
     { name: "Zoomies", seconds: 25, start: function(s, b, rand) { zoomies(s, b, rand) },
       done: function(s) { return s.mode !== "zoom" } },
     { name: "Wandering off and back", seconds: 90,

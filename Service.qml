@@ -86,36 +86,6 @@ Item {
   onLowBatteryChanged: if (!lowBattery) win.each((brain, b) => Brain.wake(brain, b))
   readonly property real energy: (store.dayCycle ? Brain.effectiveEnergy(store.energy, hour) : store.energy) * (lowBattery ? 0.4 : 1)
 
-  // The screen is being shared or recorded. Hyprland reports a stop as soon as frames pause,
-  // so only believe it after a quiet while.
-  property bool casting: false
-  // Hyprland reports every capture the same way: a screenshot, a workspace switcher's thumbnail,
-  // a call sharing a window. What tells a share apart is that it goes on: captures have to keep
-  // coming for a few seconds before the pets believe it, and one that falls silent is forgotten.
-  Timer {
-    id: castSure
-    interval: 4000
-    onTriggered: root.casting = true
-  }
-  Timer {
-    id: castGap
-    interval: 1500
-    onTriggered: castSure.stop()
-  }
-  Timer {
-    id: castOver
-    interval: 15000
-    onTriggered: root.casting = false
-  }
-  function captureSeen(on) {
-    if (on) {
-      castGap.stop()
-      castOver.stop()
-      if (!casting && !castSure.running) castSure.start()
-    } else if (casting) castOver.restart()
-    else castGap.restart()
-  }
-
   // Nobody at the desk for a few minutes: they nap until the mouse moves again.
   // How long that takes is drawn anew every time, between two and a half and five minutes.
   property int napAfter: 150 + Math.floor(Math.random() * 150)
@@ -239,7 +209,6 @@ Item {
       property bool chaseMouse: true
       property bool hangOnWindows: true
       property bool dayCycle: true
-      property bool cameraShy: true
       property bool wander: true
       property bool reminders: true
       property int waterMinutes: 45
@@ -292,7 +261,6 @@ Item {
         hour: root.hour,
         day: root.day,
         music: root.music,
-        hide: store.cameraShy && root.casting,
         exhausted: root.charge < 0.1
       }
     }
@@ -302,33 +270,6 @@ Item {
       hurry()
       for (var i = 0; i < views.length; i++)
         if (views[i].active && views[i].brain) fn(views[i].brain, boundsFor(views[i]))
-    }
-
-    // A window opened or closed right over a pet: startle the one whose middle is inside it.
-    // A window somewhere else on the screen, or only above or beside them, is none of their business.
-    function startleIn(r) {
-      for (var i = 0; i < views.length; i++) {
-        var v = views[i]
-        if (!v.active || !v.brain) continue
-        var cx = v.brain.x + v.size / 2, cy = v.brain.y + v.size * 0.6
-        if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) {
-          hurry()
-          Brain.startle(v.brain, boundsFor(v), Math.random)
-        }
-      }
-    }
-    property string opened: ""
-    property real switchedAt: 0
-    function justSwitched() { return Date.now() - switchedAt < 2000 }
-    Timer {
-      id: openedCheck
-      interval: 400   // long enough for Hyprland to report where the new window landed
-      onTriggered: {
-        if (win.justSwitched()) return
-        win.refreshLedges()
-        var r = win.rects["0x" + win.opened]
-        if (r) win.startleIn(r)
-      }
     }
 
     // Mouse position in this window's coordinates, or null when it is on another screen.
@@ -393,32 +334,14 @@ Item {
         // Events come in bursts (a title changes on every keystroke in some apps); one fresh
         // window list after the burst is enough, and none is needed while nobody is on screen.
         if (store.shown && win.present) toplevelsSoon.restart()
-        var data = String(event.data || "")
         var name = String(event.name)
         if (name === "workspace" || name === "workspacev2" || name === "focusedmon" || name === "focusedmonv2"
             || name === "activespecial" || name === "activespecialv2" || name === "moveworkspace" || name === "moveworkspacev2") {
-          // Switching workspaces swaps every window under them at once, and a workspace switcher
-          // may grab thumbnails while it does. Neither is a window popping up or a screen being
-          // shared: whatever is reported in the two seconds after a switch is ignored.
-          win.switchedAt = Date.now()
-          openedCheck.stop()
           // The window she scratched is not on this workspace: the marks go with it, at once.
           for (var v = 0; v < win.views.length; v++) {
             win.views[v].markGone = true
             if (win.views[v].brain) win.views[v].brain.mark = null
           }
-        } else if (name === "screencast") {
-          // "state,owner": a monitor or a single window is being captured (1) or no longer is (0).
-          var on = data.split(",")[0] === "1"
-          if (!on || !win.justSwitched()) root.captureSeen(on)
-        } else if (win.justSwitched()) {
-          return
-        } else if (name === "openwindow") {
-          win.opened = data.split(",")[0]
-          openedCheck.restart()
-        } else if (name === "closewindow") {
-          var gone = win.rects["0x" + data]
-          if (gone) win.startleIn(gone)
         }
       }
     }

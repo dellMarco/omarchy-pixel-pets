@@ -455,15 +455,11 @@ for (const species of ["cat", "dog"]) {
     lazy.step(30 * 3, 0.1); assert.strictEqual(lazy.dog.mode, "sleep", "a sleepy dog stretches and sleeps on")
   }
 
-  // Camera shy: out of sight while the screen is shared, back afterwards.
+  // Both away at once: they come back one after the other, not as a pair.
   {
-    const w = mk({ hide: true }); settleDown(w)
-    w.step(30 * 20)
-    assert(w.cat.mode === "away" && w.dog.mode === "away", "both gone within seconds: " + w.cat.mode + " " + w.dog.mode)
-    w.step(30 * 60); assert(w.cat.mode === "away" && w.dog.mode === "away", "and they stay gone")
     const back = mk(); back.cat.mode = back.dog.mode = "away"; back.cat.x = -96; back.dog.x = 1920
-    back.cat.until = back.dog.until = 3; back.step(30 * 150)   // one after the other, not as a pair
-    assert(!B.OFFSCREEN[back.cat.mode] && !B.OFFSCREEN[back.dog.mode], "back once it stops")
+    back.cat.until = back.dog.until = 3; back.step(30 * 150)
+    assert(!B.OFFSCREEN[back.cat.mode] && !B.OFFSCREEN[back.dog.mode], "both back")
   }
 
   // Low battery: everyone sleeps; the charger wakes them.
@@ -479,7 +475,7 @@ for (const species of ["cat", "dog"]) {
     w.step(30); assert.strictEqual(w.dog.y, floors.dog, "the hop lands")
   }
 
-  // Startled, dreams, zoomies, asking to play, yawning together: all show up over a lively day,
+  // Dreams, zoomies, asking to play, yawning together: all show up over a lively day,
   // and none of the self-started ones at the lazy end.
   const day = (energy, hours) => {
     const w = mk(); const seen = new Set(); let dreams = 0
@@ -495,16 +491,6 @@ for (const species of ["cat", "dog"]) {
   for (const m of ["zoom", "dog:zoom", "dog:chase", "flee"]) assert(lively.seen.has(m), "a lively day never showed " + m)
   for (const m of ["zoom", "dog:zoom", "dog:chase", "flee"]) assert(!lazy.seen.has(m), "a lazy day showed " + m)
   assert(lazy.dreams > 0, "long naps bring dreams")
-  {
-    const w = mk(); w.step(1); settleDown(w)
-    w.cat.mode = w.dog.mode = "idle"; w.cat.calm = w.dog.calm = 0
-    const always = () => 0.5
-    B.startle(w.cat, w.pb("cat"), always); B.startle(w.dog, w.pb("dog"), always)
-    assert.strictEqual(w.cat.mode, "hop"); assert.strictEqual(w.dog.mode, "bark")
-    w.step(20); assert.strictEqual(w.cat.mode, "scurry", "hop, then scurry off")
-    w.cat.mode = "idle"; B.startle(w.cat, w.pb("cat"), always)
-    assert.strictEqual(w.cat.mode, "idle", "not twice within minutes")
-  }
 }
 // ---------- Each keeps its own hours: no walking off or back in as a pair ----------
 {
@@ -579,22 +565,27 @@ for (const species of ["cat", "dog"]) {
     return c
   }
   const feet = shelf.y - (ground - floor)   // her frame's top when her feet are on the edge
-  const c = up()
-  assert.strictEqual(c.y, feet, "feet on the top edge")
+  // One stay can pass without a stroll, so what she does up there is collected over a few.
   const seen = new Set()
-  let ticks = 0
-  while (c.perch !== null && ticks < 30 * 600) {
-    B.tick(c, 1 / 30, pb(), rand); ticks++
-    if (c.perch === null) break
-    seen.add(c.mode)
-    assert.strictEqual(c.y, feet, c.mode + " left the edge")
-    assert(c.x >= shelf.x && c.x + size <= shelf.x + shelf.w, "walked off the end at " + c.x)
-    assert(c.clipTop === -Infinity && c.clipBottom === Infinity, "in full view up there")
+  let c
+  for (let visit = 0; visit < 4; visit++) {
+    c = up()
+    assert.strictEqual(c.y, feet, "feet on the top edge")
+    let ticks = 0
+    while (c.perch !== null && ticks < 30 * 600) {
+      B.tick(c, 1 / 30, pb(), rand); ticks++
+      if (c.perch === null) break
+      seen.add(c.mode)
+      assert.strictEqual(c.y, feet, c.mode + " left the edge")
+      assert(c.x >= shelf.x && c.x + size <= shelf.x + shelf.w, "walked off the end at " + c.x)
+      assert(c.clipTop === -Infinity && c.clipBottom === Infinity, "in full view up there")
+    }
+    assert(ticks / 30 >= 35 && ticks / 30 < 400, "stays a while, then has had enough: " + (ticks / 30).toFixed(0) + "s")
   }
-  assert(ticks / 30 >= 35 && ticks / 30 < 400, "stays a while, then has had enough: " + (ticks / 30).toFixed(0) + "s")
   assert(seen.has("walk") && seen.size >= 3, "walks and rests up there: " + [...seen])
-  assert.strictEqual(c.mode, "descend", "and climbs back down")
-  for (let i = 0; i < 30 * 30 && c.mode === "descend"; i++) {
+  // One descent in ten is the claw slide down the front instead.
+  assert(c.mode === "descend" || c.mode === "claw", "and comes back down: " + c.mode)
+  for (let i = 0; i < 30 * 30 && (c.mode === "descend" || c.mode === "claw"); i++) {
     B.tick(c, 1 / 30, pb(), rand)
     assert(c.clipTop === -Infinity, "in full view on the way down")
   }
@@ -613,14 +604,12 @@ for (const species of ["cat", "dog"]) {
   }
   world.ledges = [shelf]
 
-  // A toy, being picked up, or a shared screen bring her down too.
+  // A toy or being picked up bring her down too.
   const t = up(); B.spawnBall(t, pb()); B.tick(t, 1 / 30, pb(), rand)
   assert.strictEqual(t.mode, "fall", "jumps down for her yarn")
   const g = up(); B.grab(g); B.drop(g)
   for (let i = 0; i < 90 && g.mode === "fall"; i++) B.tick(g, 1 / 30, pb(), rand)
   assert(g.y === floor && g.perch === null, "dropped from the hand she lands on the floor, not back on the window")
-  const h = up(); B.tick(h, 1 / 30, Object.assign(pb(), { hide: true }), rand)
-  assert.strictEqual(h.mode, "fall", "comes down to hide")
 
   // A window right under the top of the screen has no room on it: she only ever peeks over that one.
   world.ledges = [{ id: "0xtop", x: 300, y: 38, w: 800 }]
@@ -710,8 +699,6 @@ for (const species of ["cat", "dog"]) {
     const win = { ledges: [{ id: "0xw", x: 300, y: 38, w: 800 }], friend: null }
     for (let i = 0; i < 30 * 3600 * 3 && cat.mode !== "climb"; i++) { B.tick(cat, 1 / 30, pb("cat", win), rand); cat.stay = 1e9 }
     assert.strictEqual(cat.mode, "climb")
-    B.tick(cat, 1 / 30, pb("cat", Object.assign({ hide: true }, win)), rand)
-    assert.strictEqual(cat.mode, "fall", "drops off the window to get out of sight")
   }
 
   // A ball brought unasked and then taken from his mouth doesn't make the next plain fetch end in a nap.
@@ -788,11 +775,9 @@ for (const species of ["cat", "dog"]) {
   for (let i = 0; i < 30 * 900; i++) { B.tick(w, 1 / 30, pb("cat"), rand); assert(!B.OFFSCREEN[w.mode], "left while asking") }
   assert(w.want === "food")
 
-  // A shared screen still sends an asking pet off, and she can't be served out there.
-  const h = B.create(600, 989); B.tick(h, 1 / 30, pb("cat"), rand); h.mode = "idle"
+  // Off screen she can't be served.
+  const h = B.create(600, 989); B.tick(h, 1 / 30, pb("cat"), rand); h.mode = "away"; h.x = -96; h.until = 1e9
   B.want(h, "water")
-  for (let i = 0; i < 30 * 30; i++) B.tick(h, 1 / 30, pb("cat", { hide: true }), rand)
-  assert.strictEqual(h.mode, "away")
   B.pet(h, pb("cat"), rand); assert(h.want === "water" && h.mode === "away", "no serving off screen")
 }
 // ---------- A window right under the bar: the small cat keeps low on it ----------
@@ -814,7 +799,7 @@ for (const species of ["cat", "dog"]) {
     assert(small.x >= roof.x && small.x + 64 <= roof.x + roof.w)
   }
   assert(seen.has("prowl") && seen.has("lurk"), "prowls and lurks up there: " + [...seen])
-  assert.strictEqual(small.mode, "descend", "and climbs back down")
+  assert(small.mode === "descend" || small.mode === "claw", "and comes back down: " + small.mode)
 
   // A click up there shoos her off: always down the front of the window with her claws out.
   const again = () => { const c = B.create(600, pb(64).floor); for (let i = 0; i < 30 * 3600 * 3 && c.perch === null; i++) { B.tick(c, 1 / 30, pb(64), rand); c.stay = 1e9 } return c }
@@ -929,9 +914,6 @@ for (const species of ["cat", "dog"]) {
   for (let i = 0; i < 30 * 3600 * 2 && going.mode !== "leave"; i++) B.tick(going, 1 / 30, pb(), rand)
   B.tick(going, 1 / 30, pb({ wander: false }), rand)
   assert.strictEqual(going.mode, "idle", "turns round on the way out")
-  // A shared screen still sends her off.
-  for (let i = 0; i < 30 * 30; i++) B.tick(going, 1 / 30, pb({ wander: false, hide: true }), rand)
-  assert.strictEqual(going.mode, "away", "camera shy is not wandering")
 }
 // ---------- Whoever came last stands in front ----------
 {
